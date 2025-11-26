@@ -70,3 +70,31 @@ export interface PlaybookRule {
         target?: string;
     };
 }
+
+// Network Traffic Types
+export interface NetworkTraffic {
+    id: string;
+    timestamp: string;
+    sourceIp: string;
+    destinationIp: string;
+    port: number;
+    protocol: string;
+    bytesTransferred: number;
+    packetCount: number;
+    isAnomalous: boolean;
+}
+
+export interface NetworkAnalysisDetail {
+    type: string;
+    source: string;
+    destination: string;
+    value: string;
+    id?: string;
+}
+
+export interface NetworkAnalysisResult {
+    summary: string;
+    anomalyScore: number;
+    anomaliesDetected: number;
+    details: NetworkAnalysisDetail[];
+}

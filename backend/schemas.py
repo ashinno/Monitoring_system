@@ -95,9 +95,41 @@ class SettingsBase(BaseSchema):
     screen_time_limit: bool
     alert_on_keywords: bool
     capture_screenshots: bool
+    keywords: List[str]
 
 class SettingsCreate(SettingsBase):
     pass
 
 class Settings(SettingsBase):
     id: int
+
+# --- Network Traffic Schemas ---
+class NetworkTrafficBase(BaseSchema):
+    id: str
+    timestamp: str
+    source_ip: str
+    destination_ip: str
+    port: int
+    protocol: str
+    bytes_transferred: int
+    packet_count: int
+    is_anomalous: bool = False
+
+class NetworkTrafficCreate(NetworkTrafficBase):
+    pass
+
+class NetworkTraffic(NetworkTrafficBase):
+    pass
+
+class NetworkAnalysisDetail(BaseSchema):
+    type: str
+    source: str
+    destination: str
+    value: str
+    id: Optional[str] = None
+
+class NetworkAnalysisResult(BaseSchema):
+    summary: str
+    anomaly_score: float
+    anomalies_detected: int
+    details: List[NetworkAnalysisDetail]

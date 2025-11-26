@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle } from 'lucide-react';
+import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle, Plus, Trash2 } from 'lucide-react';
 import API from '../services/api';
 
 const Settings: React.FC = () => {
@@ -9,8 +9,10 @@ const Settings: React.FC = () => {
         enforceSafeSearch: true,
         screenTimeLimit: true,
         alertOnKeywords: true,
-        captureScreenshots: false
+        captureScreenshots: false,
+        keywords: [] as string[]
     });
+    const [newKeyword, setNewKeyword] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SAVED'>('IDLE');
 
@@ -18,8 +20,6 @@ const Settings: React.FC = () => {
         const fetchSettings = async () => {
             try {
                 const response = await API.get('/settings');
-                // Backend returns camelCase due to alias_generator
-                // Ensure we only set the keys we care about, or just spread
                 if (response.data) {
                     const { id, ...rest } = response.data;
                     setSettings(prev => ({ ...prev, ...rest }));
@@ -33,6 +33,23 @@ const Settings: React.FC = () => {
 
     const toggle = (key: keyof typeof settings) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const addKeyword = () => {
+        if (newKeyword.trim() && !settings.keywords.includes(newKeyword.trim())) {
+            setSettings(prev => ({
+                ...prev,
+                keywords: [...prev.keywords, newKeyword.trim()]
+            }));
+            setNewKeyword("");
+        }
+    };
+
+    const removeKeyword = (word: string) => {
+        setSettings(prev => ({
+            ...prev,
+            keywords: prev.keywords.filter(k => k !== word)
+        }));
     };
 
     const handleSaveClick = () => {
@@ -173,7 +190,7 @@ const Settings: React.FC = () => {
                     <div className="flex items-center justify-between p-4 bg-slate-900/40 rounded-lg">
                         <div className="flex-1">
                             <p className="text-slate-200 font-medium">Keyword Triggers</p>
-                            <p className="text-slate-500 text-xs">Alert admin immediately if sensitive words (e.g., "confidential", "password") are detected.</p>
+                            <p className="text-slate-500 text-xs">Alert admin immediately if sensitive words are detected.</p>
                         </div>
                          <button 
                             onClick={() => toggle('alertOnKeywords')}
@@ -182,6 +199,46 @@ const Settings: React.FC = () => {
                             <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.alertOnKeywords ? 'translate-x-6' : 'translate-x-0'}`} />
                         </button>
                     </div>
+
+                    {settings.alertOnKeywords && (
+                        <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800">
+                            <h4 className="text-slate-300 text-sm font-semibold mb-3">Monitored Keywords</h4>
+                            
+                            <div className="flex gap-2 mb-3">
+                                <input 
+                                    type="text" 
+                                    value={newKeyword}
+                                    onChange={(e) => setNewKeyword(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && addKeyword()}
+                                    placeholder="Enter keyword (e.g., confidential)"
+                                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-yellow-500"
+                                />
+                                <button 
+                                    onClick={addKeyword}
+                                    className="bg-yellow-600 hover:bg-yellow-500 text-white p-1.5 rounded transition-colors"
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                {settings.keywords?.map((word, idx) => (
+                                    <div key={idx} className="bg-slate-800 border border-slate-700 rounded-full px-3 py-1 text-xs text-slate-300 flex items-center gap-2 group">
+                                        {word}
+                                        <button 
+                                            onClick={() => removeKeyword(word)}
+                                            className="text-slate-500 hover:text-red-400 opacity-60 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {settings.keywords?.length === 0 && (
+                                    <span className="text-slate-600 text-xs italic">No keywords configured</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

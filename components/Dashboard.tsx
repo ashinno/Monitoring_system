@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     BarChart, Bar, Cell, Legend
 } from 'recharts';
-import { ShieldAlert, Globe, Activity, FileWarning, Users, BrainCircuit, Sparkles, PieChart } from 'lucide-react';
-import { LogEntry, RiskLevel } from '../types';
+import { ShieldAlert, Globe, Users, BrainCircuit, Sparkles, PieChart } from 'lucide-react';
+import { LogEntry, RiskLevel, NetworkTraffic } from '../types';
+import { getNetworkTraffic } from '../services/api';
+import NetworkAnalysis from './NetworkAnalysis';
 
 interface DashboardProps {
     logs: LogEntry[];
@@ -37,6 +39,62 @@ const trafficData = Array.from({ length: 24 }, (_, i) => ({
 }));
 
 const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
+    const [chartData, setChartData] = useState<any[]>(trafficData);
+
+    useEffect(() => {
+        const fetchTraffic = async () => {
+            try {
+                const response = await getNetworkTraffic();
+                if (response.data) {
+                    processTrafficData(response.data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch traffic logs", error);
+            }
+        };
+        fetchTraffic();
+    }, []);
+
+    const processTrafficData = (data: NetworkTraffic[]) => {
+        // Group by hour:minute
+        const grouped: {[key: string]: {inbound: number, outbound: number}} = {};
+        
+        // Sort by timestamp asc
+        const sorted = [...data].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        sorted.forEach(t => {
+            const date = new Date(t.timestamp);
+            const timeKey = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+            
+            if (!grouped[timeKey]) {
+                grouped[timeKey] = { inbound: 0, outbound: 0 };
+            }
+            
+            // Simple logic: if dest is internal (starts with 192.168), it's inbound. Else outbound.
+            // Adjust based on actual data patterns.
+            if (t.destinationIp.startsWith('192.168')) {
+                grouped[timeKey].inbound += t.bytesTransferred;
+            } else {
+                grouped[timeKey].outbound += t.bytesTransferred;
+            }
+        });
+
+        // Convert to array
+        const processed = Object.keys(grouped).map(key => ({
+            time: key,
+            inbound: grouped[key].inbound,
+            outbound: grouped[key].outbound
+        }));
+
+        // If not enough data, pad with previous mock-like logic or just show what we have
+        if (processed.length > 0) {
+            setChartData(processed);
+        } else {
+            // Fallback to mock if empty
+            setChartData(trafficData);
+        }
+    };
+
     // Dynamic Calculations
     const threatsBlocked = logs.filter(l => l.riskLevel === RiskLevel.HIGH || l.riskLevel === RiskLevel.CRITICAL).length;
     const activeUsers = new Set(logs.map(l => l.user)).size;
@@ -130,11 +188,11 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                 <div className="lg:col-span-2 glass-panel p-6 rounded-xl">
                     <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                         <Globe size={18} className="text-cyan-400" />
-                        Network Traffic Analysis
+                        Network Traffic Overview
                     </h3>
                     <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={trafficData}>
+                            <AreaChart data={chartData}>
                                 <defs>
                                     <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
@@ -216,6 +274,9 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                     </table>
                 </div>
             </div>
+
+            {/* Network Analysis Module */}
+            <NetworkAnalysis />
         </div>
     );
 };

@@ -12,4 +12,7 @@ API.interceptors.request.use((config) => {
     return config;
 });
 
+export const getNetworkTraffic = () => API.get('/traffic');
+export const getNetworkAnalysis = () => API.get('/traffic/analyze');
+
 export default API;

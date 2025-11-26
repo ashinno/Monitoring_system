@@ -1,16 +1,67 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
 from contextlib import asynccontextmanager
 import socketio
 import uvicorn
+import asyncio
+import os
+import uuid
+from datetime import datetime
 
 import models, schemas, auth, analysis, database
 from database import engine
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
+
+async def screenshot_loop():
+    while True:
+        try:
+            db = database.SessionLocal()
+            settings = db.query(models.Settings).first()
+            if settings and settings.capture_screenshots:
+                # Ensure directory exists
+                os.makedirs("screenshots", exist_ok=True)
+                
+                filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                filepath = os.path.join("screenshots", filename)
+                
+                # Run screencapture (macOS specific)
+                # -x: silent
+                proc = await asyncio.create_subprocess_exec(
+                    "screencapture", "-x", filepath,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await proc.communicate()
+                
+                if proc.returncode == 0:
+                    log = models.Log(
+                        id=str(uuid.uuid4()),
+                        timestamp=datetime.now().isoformat(),
+                        user="SYSTEM",
+                        activity_type="SCREENSHOT",
+                        risk_level="INFO",
+                        description="Periodic Screenshot Captured",
+                        details=f"/screenshots/{filename}",
+                        ip_address="127.0.0.1",
+                        location="Local"
+                    )
+                    db.add(log)
+                    db.commit()
+                    
+                    # Emit
+                    log_response = schemas.Log.model_validate(log)
+                    await sio.emit('new_log', log_response.model_dump(by_alias=True))
+            
+            db.close()
+        except Exception as e:
+            print(f"Screenshot error: {e}")
+            
+        await asyncio.sleep(30) # Check every 30 seconds
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,16 +121,24 @@ async def lifespan(app: FastAPI):
                 enforce_safe_search=True,
                 screen_time_limit=True,
                 alert_on_keywords=True,
-                capture_screenshots=False
+                capture_screenshots=False,
+                keywords=["password", "confidential", "secret", "key"]
             )
             db.add(settings)
             db.commit()
             
     finally:
         db.close()
+    
+    # Start screenshot task
+    asyncio.create_task(screenshot_loop())
+    
     yield
 
 app = FastAPI(title="Sentinel AI Backend", lifespan=lifespan)
+
+# Mount screenshots directory
+app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
 
 # CORS
 app.add_middleware(
@@ -200,7 +259,7 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
         
         # Keyword Alert
         if settings.alert_on_keywords:
-            keywords = ["password", "confidential", "secret", "key"]
+            keywords = [k.lower() for k in (settings.keywords or [])]
             if any(k in desc for k in keywords) or any(k in details for k in keywords):
                  if log_data.get('risk_level') not in ['HIGH', 'CRITICAL']:
                     log_data['risk_level'] = 'HIGH'
@@ -303,6 +362,30 @@ def analyze_security_logs(db: Session = Depends(get_db), current_user: models.Us
     logs_data = [schemas.Log.model_validate(l).model_dump() for l in logs]
     
     result = analysis.analyze_logs(logs_data)
+    return result
+
+# Network Traffic Routes
+@app.post("/traffic", response_model=schemas.NetworkTraffic)
+async def create_traffic_log(traffic: schemas.NetworkTrafficCreate, db: Session = Depends(get_db)):
+    traffic_data = traffic.model_dump()
+    db_traffic = models.NetworkTraffic(**traffic_data)
+    db.add(db_traffic)
+    db.commit()
+    db.refresh(db_traffic)
+    return db_traffic
+
+@app.get("/traffic", response_model=List[schemas.NetworkTraffic])
+def read_traffic(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    return db.query(models.NetworkTraffic).order_by(models.NetworkTraffic.timestamp.desc()).offset(skip).limit(limit).all()
+
+@app.get("/traffic/analyze", response_model=schemas.NetworkAnalysisResult)
+def analyze_network_traffic_endpoint(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    # Fetch recent traffic
+    traffic = db.query(models.NetworkTraffic).limit(1000).all() # Limit for demo
+    
+    traffic_data = [schemas.NetworkTraffic.model_validate(t).model_dump() for t in traffic]
+    
+    result = analysis.analyze_network_traffic(traffic_data)
     return result
 
 # Wrap FastAPI with Socket.IO

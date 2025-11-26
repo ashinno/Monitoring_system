@@ -49,3 +49,17 @@ class Settings(Base):
     screen_time_limit = Column(Boolean, default=True)
     alert_on_keywords = Column(Boolean, default=True)
     capture_screenshots = Column(Boolean, default=False)
+    keywords = Column(JSON, default=["password", "confidential", "secret", "key"])
+
+class NetworkTraffic(Base):
+    __tablename__ = "network_traffic"
+
+    id = Column(String, primary_key=True, index=True)
+    timestamp = Column(String, default=lambda: datetime.datetime.now().isoformat())
+    source_ip = Column(String, index=True)
+    destination_ip = Column(String, index=True)
+    port = Column(Integer)
+    protocol = Column(String)
+    bytes_transferred = Column(Integer)
+    packet_count = Column(Integer)
+    is_anomalous = Column(Boolean, default=False)

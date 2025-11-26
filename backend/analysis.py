@@ -83,3 +83,73 @@ def analyze_logs(logs_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         "recommendations": recommendations,
         "flagged_logs": flagged_logs
     }
+
+def analyze_network_traffic(traffic_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not traffic_list:
+        return {
+            "summary": "No network traffic data available.",
+            "anomaly_score": 0.0,
+            "anomalies_detected": 0,
+            "details": []
+        }
+
+    df = pd.DataFrame(traffic_list)
+    
+    anomalies = []
+    
+    # 1. High Byte Transfer
+    # Threshold: e.g., > 100MB (100 * 1024 * 1024)
+    HIGH_BYTE_THRESHOLD = 100 * 1024 * 1024
+    if 'bytes_transferred' in df.columns:
+        high_byte_events = df[df['bytes_transferred'] > HIGH_BYTE_THRESHOLD]
+        for _, row in high_byte_events.iterrows():
+            anomalies.append({
+                "type": "High Data Transfer",
+                "source": row.get('source_ip', 'Unknown'),
+                "destination": row.get('destination_ip', 'Unknown'),
+                "value": f"{row['bytes_transferred'] / (1024*1024):.2f} MB",
+                "id": row.get('id')
+            })
+
+    # 2. Suspicious Ports - Port Scanning Detection
+    # Multiple distinct destination ports from same source IP
+    port_scan_threshold = 10
+    if 'source_ip' in df.columns and 'port' in df.columns:
+        ports_per_ip = df.groupby('source_ip')['port'].nunique()
+        scanners = ports_per_ip[ports_per_ip > port_scan_threshold]
+        for ip, count in scanners.items():
+            anomalies.append({
+                "type": "Potential Port Scan",
+                "source": ip,
+                "destination": "Multiple",
+                "value": f"{count} unique ports",
+                "id": None
+            })
+
+    # 3. DDoS Potential (High packet count)
+    PACKET_THRESHOLD = 10000
+    if 'packet_count' in df.columns:
+        high_packet_events = df[df['packet_count'] > PACKET_THRESHOLD]
+        for _, row in high_packet_events.iterrows():
+             anomalies.append({
+                "type": "High Packet Volume (DDoS Risk)",
+                "source": row.get('source_ip', 'Unknown'),
+                "destination": row.get('destination_ip', 'Unknown'),
+                "value": f"{row['packet_count']} packets",
+                "id": row.get('id')
+            })
+
+    total_events = len(df)
+    anomaly_count = len(anomalies)
+    
+    # Simple score calculation
+    anomaly_score = (anomaly_count / total_events * 100) if total_events > 0 else 0.0
+    
+    summary = f"Analyzed {total_events} traffic events. Detected {anomaly_count} anomalies."
+
+    return {
+        "summary": summary,
+        "anomaly_score": round(min(100.0, anomaly_score), 2),
+        "anomalies_detected": anomaly_count,
+        "details": anomalies
+    }
