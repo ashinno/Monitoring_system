@@ -113,6 +113,7 @@ class NetworkTrafficBase(BaseSchema):
     protocol: str
     bytes_transferred: int
     packet_count: int
+    latency: int = 0
     is_anomalous: bool = False
 
 class NetworkTrafficCreate(NetworkTrafficBase):
@@ -133,3 +134,39 @@ class NetworkAnalysisResult(BaseSchema):
     anomaly_score: float
     anomalies_detected: int
     details: List[NetworkAnalysisDetail]
+
+# --- Simulation Schemas ---
+class SimulationConfig(BaseSchema):
+    is_running: bool = False
+    traffic_type: str = "HTTP" # HTTP, TCP, UDP
+    volume: str = "medium" # low, medium, high
+    pattern: str = "steady" # steady, bursty, random
+    packet_size_range: List[int] = [500, 1500]
+    error_rate: float = 0.0 # 0.0 to 1.0
+    latency: int = 0 # milliseconds
+
+class SimulationStats(BaseSchema):
+    packets_generated: int
+    bytes_generated: int
+    errors_simulated: int
+
+class SimulationStatus(BaseSchema):
+    is_running: bool
+    config: SimulationConfig
+    stats: SimulationStats
+
+class SimulationProfileBase(BaseSchema):
+    name: str
+    description: Optional[str] = None
+    traffic_type: str
+    volume: str
+    pattern: str
+    packet_size_range: List[int]
+    error_rate: float
+    latency: int = 0
+
+class SimulationProfileCreate(SimulationProfileBase):
+    pass
+
+class SimulationProfile(SimulationProfileBase):
+    id: str

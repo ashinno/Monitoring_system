@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, JSON, DateTime, Text
+from sqlalchemy import Column, String, Integer, Boolean, JSON, DateTime, Text, Float
 from database import Base
 import datetime
 
@@ -62,4 +62,19 @@ class NetworkTraffic(Base):
     protocol = Column(String)
     bytes_transferred = Column(Integer)
     packet_count = Column(Integer)
+    latency = Column(Integer, default=0) # milliseconds
     is_anomalous = Column(Boolean, default=False)
+
+class SimulationProfile(Base):
+    __tablename__ = "simulation_profiles"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String, nullable=True)
+    traffic_type = Column(String)
+    volume = Column(String)
+    pattern = Column(String)
+    error_rate = Column(Float)
+    packet_size_range = Column(JSON) # Store as list [min, max]
+    latency = Column(Integer, default=0)
+

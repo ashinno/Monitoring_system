@@ -187,12 +187,12 @@ async def read_users_me(current_user: models.User = Depends(auth.get_current_use
 
 # User Routes
 @app.get("/users", response_model=List[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     users = db.query(models.User).offset(skip).limit(limit).all()
     return users
 
 @app.post("/users", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     db_user = db.query(models.User).filter(models.User.name == user.name).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -212,7 +212,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
     return db_user
 
 @app.put("/users/{user_id}", response_model=schemas.User)
-def update_user(user_id: str, user_update: schemas.UserCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def update_user(user_id: str, user_update: schemas.UserCreate, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -230,7 +230,7 @@ def update_user(user_id: str, user_update: schemas.UserCreate, db: Session = Dep
     return db_user
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def delete_user(user_id: str, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -241,7 +241,7 @@ def delete_user(user_id: str, db: Session = Depends(get_db), current_user: model
 
 # Log Routes
 @app.get("/logs", response_model=List[schemas.Log])
-def read_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def read_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     # Return latest first
     logs = db.query(models.Log).order_by(models.Log.timestamp.desc()).offset(skip).limit(limit).all()
     return logs
@@ -295,7 +295,7 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
 
 # Playbook Routes
 @app.get("/playbooks", response_model=List[schemas.Playbook])
-def read_playbooks(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def read_playbooks(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     playbooks = db.query(models.Playbook).all()
     # Map flat DB to nested Schema
     # The Pydantic model expects nested trigger/action.
@@ -323,7 +323,7 @@ def read_playbooks(db: Session = Depends(get_db), current_user: models.User = De
 
 # Settings Routes
 @app.get("/settings", response_model=schemas.Settings)
-def read_settings(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def read_settings(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     settings = db.query(models.Settings).first()
     if not settings:
         # Should be seeded, but just in case
@@ -334,7 +334,7 @@ def read_settings(db: Session = Depends(get_db), current_user: models.User = Dep
     return settings
 
 @app.put("/settings", response_model=schemas.Settings)
-def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     db_settings = db.query(models.Settings).first()
     if not db_settings:
         db_settings = models.Settings(id=1)
@@ -349,7 +349,7 @@ def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_
     return db_settings
 
 @app.post("/analyze", response_model=schemas.AnalysisResult)
-def analyze_security_logs(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     # Fetch all logs for analysis
     # In production, might limit to last 24h or similar
     logs = db.query(models.Log).all()
@@ -375,11 +375,11 @@ async def create_traffic_log(traffic: schemas.NetworkTrafficCreate, db: Session 
     return db_traffic
 
 @app.get("/traffic", response_model=List[schemas.NetworkTraffic])
-def read_traffic(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def read_traffic(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     return db.query(models.NetworkTraffic).order_by(models.NetworkTraffic.timestamp.desc()).offset(skip).limit(limit).all()
 
 @app.get("/traffic/analyze", response_model=schemas.NetworkAnalysisResult)
-def analyze_network_traffic_endpoint(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def analyze_network_traffic_endpoint(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     # Fetch recent traffic
     traffic = db.query(models.NetworkTraffic).limit(1000).all() # Limit for demo
     
@@ -387,6 +387,53 @@ def analyze_network_traffic_endpoint(db: Session = Depends(get_db), current_user
     
     result = analysis.analyze_network_traffic(traffic_data)
     return result
+
+# --- Simulation Routes ---
+from simulation import simulator
+
+@app.post("/simulation/start", response_model=schemas.SimulationStatus)
+def start_simulation(config: schemas.SimulationConfig, _: models.User = Depends(auth.get_current_user)):
+    simulator.start(config)
+    return simulator.get_status()
+
+@app.post("/simulation/stop", response_model=schemas.SimulationStatus)
+def stop_simulation(_: models.User = Depends(auth.get_current_user)):
+    simulator.stop()
+    return simulator.get_status()
+
+@app.get("/simulation/status", response_model=schemas.SimulationStatus)
+def get_simulation_status(_: models.User = Depends(auth.get_current_user)):
+    return simulator.get_status()
+
+# --- Simulation Profile Routes ---
+@app.post("/simulation/profiles", response_model=schemas.SimulationProfile)
+def create_simulation_profile(profile: schemas.SimulationProfileCreate, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    # Check if name exists
+    if db.query(models.SimulationProfile).filter(models.SimulationProfile.name == profile.name).first():
+        raise HTTPException(status_code=400, detail="Profile with this name already exists")
+    
+    db_profile = models.SimulationProfile(
+        id=str(uuid.uuid4()),
+        **profile.model_dump()
+    )
+    db.add(db_profile)
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile
+
+@app.get("/simulation/profiles", response_model=List[schemas.SimulationProfile])
+def read_simulation_profiles(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    return db.query(models.SimulationProfile).all()
+
+@app.delete("/simulation/profiles/{profile_id}")
+def delete_simulation_profile(profile_id: str, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    db_profile = db.query(models.SimulationProfile).filter(models.SimulationProfile.id == profile_id).first()
+    if not db_profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+        
+    db.delete(db_profile)
+    db.commit()
+    return {"ok": True}
 
 # Wrap FastAPI with Socket.IO
 app = socketio.ASGIApp(sio, other_asgi_app=app)

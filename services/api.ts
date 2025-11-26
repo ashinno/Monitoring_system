@@ -15,4 +15,12 @@ API.interceptors.request.use((config) => {
 export const getNetworkTraffic = () => API.get('/traffic');
 export const getNetworkAnalysis = () => API.get('/traffic/analyze');
 
+export const startSimulation = (config: any) => API.post('/simulation/start', config);
+export const stopSimulation = () => API.post('/simulation/stop');
+export const getSimulationStatus = () => API.get('/simulation/status');
+
+export const getSimulationProfiles = () => API.get('/simulation/profiles');
+export const createSimulationProfile = (profile: any) => API.post('/simulation/profiles', profile);
+export const deleteSimulationProfile = (id: string) => API.delete(`/simulation/profiles/${id}`);
+
 export default API;
