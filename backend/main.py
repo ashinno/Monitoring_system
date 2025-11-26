@@ -11,7 +11,7 @@ import os
 import uuid
 from datetime import datetime
 
-import models, schemas, auth, analysis, database
+import models, schemas, auth, analysis, database, ml_engine
 from database import engine
 
 # Create tables
@@ -280,6 +280,16 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
                     log_data['risk_level'] = 'HIGH'
                 log_data['description'] = log_data['description'] + " [POLICY VIOLATION: SOCIAL MEDIA]"
 
+    # ML Anomaly Detection
+    try:
+        prediction = ml_engine.predict_anomaly(log_data)
+        if prediction == -1:
+            if log_data.get('risk_level') != 'CRITICAL':
+                log_data['risk_level'] = 'HIGH'
+            log_data['description'] = log_data['description'] + " [ML_DETECTED]"
+    except Exception as e:
+        print(f"ML Prediction Error: {e}")
+
     db_log = models.Log(**log_data)
     db.add(db_log)
     db.commit()
@@ -292,6 +302,12 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     await sio.emit('new_log', log_response.model_dump(by_alias=True))
     
     return db_log
+
+@app.post("/ml/train")
+def train_anomaly_model(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    logs = db.query(models.Log).all()
+    ml_engine.train_model(logs)
+    return {"message": "Model training triggered"}
 
 # Playbook Routes
 @app.get("/playbooks", response_model=List[schemas.Playbook])
