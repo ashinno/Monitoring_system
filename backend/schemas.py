@@ -98,6 +98,15 @@ class SettingsBase(BaseSchema):
     capture_screenshots: bool
     keywords: List[str]
 
+# --- Prediction Schemas ---
+class PredictionItem(BaseSchema):
+    activity: str
+    probability: float
+
+class PredictionResult(BaseSchema):
+    current_activity: str
+    predictions: List[PredictionItem]
+
 class SettingsCreate(SettingsBase):
     pass
 

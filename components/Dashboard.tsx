@@ -4,7 +4,7 @@ import {
     BarChart, Bar, Cell, Legend
 } from 'recharts';
 import { ShieldAlert, Globe, Users, BrainCircuit, Sparkles, PieChart } from 'lucide-react';
-import { LogEntry, RiskLevel, NetworkTraffic } from '../types';
+import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult } from '../types';
 import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
 import NetworkGraph from './NetworkGraph';
@@ -44,6 +44,7 @@ const trafficData = Array.from({ length: 24 }, (_, i) => ({
 const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
     const [chartData, setChartData] = useState<any[]>(trafficData);
     const [trafficLogs, setTrafficLogs] = useState<NetworkTraffic[]>([]);
+    const [prediction, setPrediction] = useState<PredictionResult | null>(null);
 
     useEffect(() => {
         const fetchTraffic = async () => {
@@ -67,6 +68,10 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                  if (updated.length > 5000) return updated.slice(-5000);
                  return updated;
              });
+        });
+
+        socket.on('prediction_update', (data: PredictionResult) => {
+            setPrediction(data);
         });
 
         return () => {
@@ -205,6 +210,34 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                              <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500"/>Cri</span>
                          </div>
                     </div>
+                </div>
+
+                {/* Prediction Card */}
+                <div className="glass-panel p-5 rounded-xl hover:bg-slate-800/50 transition-colors flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-2">
+                        <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                            <Sparkles className="text-indigo-400" />
+                        </div>
+                        <span className="text-xs font-mono text-indigo-400">AI PREDICT</span>
+                    </div>
+                    <h3 className="text-slate-400 text-sm font-medium">Predicted Next Move</h3>
+                    {prediction ? (
+                        <div className="mt-3 space-y-2">
+                            <div className="flex justify-between text-xs text-slate-500">
+                                <span>Current: {prediction.currentActivity}</span>
+                            </div>
+                            {prediction.predictions.map((p, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-300">{p.activity}</span>
+                                    <span className={`font-mono ${p.probability > 0.8 ? 'text-red-400' : 'text-slate-400'}`}>
+                                        {(p.probability * 100).toFixed(0)}%
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-slate-500 text-sm mt-2">Waiting for activity...</p>
+                    )}
                 </div>
             </div>
 

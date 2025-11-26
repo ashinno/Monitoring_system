@@ -11,7 +11,7 @@ import os
 import uuid
 from datetime import datetime
 
-import models, schemas, auth, analysis, database, ml_engine
+import models, schemas, auth, analysis, database, ml_engine, prediction_engine
 from database import engine
 
 # Create tables
@@ -131,8 +131,13 @@ async def lifespan(app: FastAPI):
         db.close()
     
     # Start screenshot task
+    # Trigger reload
     asyncio.create_task(screenshot_loop())
     
+    # Train Prediction Engine
+    print("Training Prediction Engine...")
+    prediction_engine.predictor.train(db)
+
     yield
 
 app = FastAPI(title="Sentinel AI Backend", lifespan=lifespan)
@@ -301,6 +306,31 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     log_response = schemas.Log.model_validate(db_log)
     await sio.emit('new_log', log_response.model_dump(by_alias=True))
     
+    # --- Prediction Integration ---
+    try:
+        current_activity = log_data.get('activity_type')
+        if current_activity:
+            next_steps = prediction_engine.predictor.predict_next_step(current_activity)
+            
+            # Check for High Risk Predictions
+            for step in next_steps:
+                if step['activity'] == 'Data Exfiltration' and step['probability'] >= 0.8:
+                    print("PRE-EMPTIVE WARNING: High probability of Data Exfiltration!")
+                    await sio.emit('security_alert', {
+                        "type": "PREDICTIVE_THREAT",
+                        "message": "High probability of Data Exfiltration detected based on current activity.",
+                        "details": f"Following {current_activity}, there is a {step['probability']*100:.1f}% chance of Data Exfiltration.",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+            # Emit prediction update
+            await sio.emit('prediction_update', {
+                "currentActivity": current_activity,
+                "predictions": next_steps
+            })
+    except Exception as e:
+        print(f"Prediction Error: {e}")
+
     return db_log
 
 @app.post("/ml/train")
@@ -379,6 +409,14 @@ def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depend
     
     result = analysis.analyze_logs(logs_data)
     return result
+
+@app.get("/predict", response_model=schemas.PredictionResult)
+def predict_next_action(current_activity: str, _: models.User = Depends(auth.get_current_user)):
+    predictions = prediction_engine.predictor.predict_next_step(current_activity)
+    return {
+        "current_activity": current_activity,
+        "predictions": predictions
+    }
 
 # Network Traffic Routes
 @app.post("/traffic", response_model=schemas.NetworkTraffic)

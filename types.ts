@@ -98,3 +98,13 @@ export interface NetworkAnalysisResult {
     anomaliesDetected: number;
     details: NetworkAnalysisDetail[];
 }
+
+export interface PredictionItem {
+    activity: string;
+    probability: number;
+}
+
+export interface PredictionResult {
+    currentActivity: string;
+    predictions: PredictionItem[];
+}
