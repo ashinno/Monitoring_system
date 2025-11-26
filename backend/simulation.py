@@ -126,10 +126,41 @@ class TrafficSimulator:
 
         bytes_transferred = random.randint(self._config.packet_size_range[0], self._config.packet_size_range[1])
         
+        # Check for attack type overrides
+        if self._config.attack_type == "ddos":
+            # DDoS: Multiple random sources to ONE victim (e.g., internal server)
+            # Use random external IPs as source
+            source_ip = f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
+            dest_ip = "192.168.1.100" # Target server
+            # Port could be 80 or 443
+            port = random.choice([80, 443])
+            protocol = "TCP"
+        
+        elif self._config.attack_type == "port_scan":
+            # Port Scan: One source to One target, sequential/random ports
+            source_ip = "192.168.1.50" # Attacker
+            dest_ip = "192.168.1.100" # Target
+            # Pick a random port to simulate scanning
+            port = random.randint(1, 10000)
+            
+        elif self._config.attack_type == "brute_force":
+            # Brute Force: Repeated attempts on specific service
+            source_ip = "192.168.1.50"
+            dest_ip = "192.168.1.100"
+            port = 22 # SSH
+            protocol = "TCP"
+            
+        elif self._config.attack_type == "data_exfiltration":
+             # Data Exfiltration: Internal to External, large payload
+             source_ip = "192.168.1.100" # Internal compromised host
+             dest_ip = "45.33.22.11" # External C2
+             bytes_transferred = random.randint(100000, 1000000) # Large packets
+             port = 443 # HTTPS usually
+
         # Inject anomalies occasionally (5% chance)
         is_anomalous = False
-        if random.random() < 0.05:
-            # Generate anomaly
+        if not self._config.attack_type and random.random() < 0.05:
+            # Generate anomaly (only if not running a specific attack type)
             anomaly_type = random.choice(["high_transfer", "port_scan"])
             if anomaly_type == "high_transfer":
                 bytes_transferred = random.randint(100 * 1024 * 1024, 500 * 1024 * 1024)

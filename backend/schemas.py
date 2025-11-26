@@ -144,6 +144,7 @@ class SimulationConfig(BaseSchema):
     packet_size_range: List[int] = [500, 1500]
     error_rate: float = 0.0 # 0.0 to 1.0
     latency: int = 0 # milliseconds
+    attack_type: Optional[str] = None
 
 class SimulationStats(BaseSchema):
     packets_generated: int
@@ -164,6 +165,7 @@ class SimulationProfileBase(BaseSchema):
     packet_size_range: List[int]
     error_rate: float
     latency: int = 0
+    attack_type: Optional[str] = None
 
 class SimulationProfileCreate(SimulationProfileBase):
     pass

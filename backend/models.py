@@ -77,4 +77,5 @@ class SimulationProfile(Base):
     error_rate = Column(Float)
     packet_size_range = Column(JSON) # Store as list [min, max]
     latency = Column(Integer, default=0)
+    attack_type = Column(String, nullable=True)
 

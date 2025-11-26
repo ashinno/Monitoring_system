@@ -10,9 +10,26 @@ const TrafficSimulator: React.FC = () => {
         volume: 'medium',
         pattern: 'steady',
         errorRate: 0.0,
-        latency: 0
+        latency: 0,
+        attackType: ''
     });
     const [loading, setLoading] = useState(false);
+    
+    const applyAttackConfig = (type: string) => {
+        let newConfig = { ...config, attackType: type };
+        if (type === 'ddos') {
+            newConfig = { ...newConfig, volume: 'high', pattern: 'bursty', trafficType: 'TCP' };
+        } else if (type === 'port_scan') {
+             newConfig = { ...newConfig, volume: 'medium', pattern: 'steady', trafficType: 'TCP' };
+        } else if (type === 'brute_force') {
+             newConfig = { ...newConfig, volume: 'medium', pattern: 'steady', trafficType: 'TCP' };
+        } else if (type === 'data_exfiltration') {
+             newConfig = { ...newConfig, volume: 'medium', pattern: 'steady', trafficType: 'HTTP' };
+        } else {
+             newConfig = { ...newConfig, attackType: '' };
+        }
+        setConfig(newConfig);
+    };
     
     // Profile State
     const [profiles, setProfiles] = useState<any[]>([]);
@@ -58,7 +75,8 @@ const TrafficSimulator: React.FC = () => {
                 pattern: config.pattern,
                 errorRate: config.errorRate,
                 packetSizeRange: [500, 1500],
-                latency: config.latency
+                latency: config.latency,
+                attackType: config.attackType || undefined
             });
             setIsRunning(true);
         } catch (error) {
@@ -91,7 +109,8 @@ const TrafficSimulator: React.FC = () => {
                 pattern: config.pattern,
                 errorRate: config.errorRate,
                 packetSizeRange: [500, 1500],
-                latency: config.latency
+                latency: config.latency,
+                attackType: config.attackType
             });
             setProfileName('');
             setShowSaveProfile(false);
@@ -108,7 +127,8 @@ const TrafficSimulator: React.FC = () => {
             volume: profile.volume,
             pattern: profile.pattern,
             errorRate: profile.errorRate,
-            latency: profile.latency || 0
+            latency: profile.latency || 0,
+            attackType: profile.attackType || ''
         });
     };
 
@@ -151,6 +171,39 @@ const TrafficSimulator: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Controls */}
                 <div className="space-y-4">
+                    
+                    {/* Attack Scenarios */}
+                     <div className="mb-4">
+                        <label className="text-xs text-slate-400 font-mono mb-2 block">Attack Scenarios (Preconfigured)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                             {['ddos', 'port_scan', 'brute_force', 'data_exfiltration'].map(type => (
+                                <button
+                                    key={type}
+                                    onClick={() => applyAttackConfig(type)}
+                                    disabled={isRunning}
+                                    className={`px-2 py-2 text-xs font-medium rounded border transition-all ${
+                                        config.attackType === type 
+                                        ? 'bg-red-500/20 border-red-500 text-red-300' 
+                                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                                    }`}
+                                >
+                                    {type.replace('_', ' ').toUpperCase()}
+                                </button>
+                             ))}
+                             <button
+                                onClick={() => applyAttackConfig('')}
+                                disabled={isRunning}
+                                className={`px-2 py-2 text-xs font-medium rounded border transition-all ${
+                                    config.attackType === '' 
+                                    ? 'bg-purple-500/20 border-purple-500 text-purple-300' 
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                                } col-span-2`}
+                             >
+                                CUSTOM / CLEAR
+                             </button>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs text-slate-400 font-mono mb-2 block">Traffic Type</label>
