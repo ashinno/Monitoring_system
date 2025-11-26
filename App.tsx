@@ -15,6 +15,7 @@ const App: React.FC = () => {
     // Auth State
     const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
     const [loginError, setLoginError] = useState('');
+    const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
     const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
     
@@ -22,6 +23,24 @@ const App: React.FC = () => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [playbooks, setPlaybooks] = useState<PlaybookRule[]>([]);
+
+    // Check for existing token on mount
+    useEffect(() => {
+        const checkAuth = async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const userRes = await API.get('/users/me');
+                    setCurrentUser(userRes.data);
+                } catch (error) {
+                    console.error("Token validation failed", error);
+                    localStorage.removeItem('token');
+                }
+            }
+            setIsLoadingAuth(false);
+        };
+        checkAuth();
+    }, []);
 
     // Initial Data Fetch
     useEffect(() => {
@@ -231,6 +250,14 @@ const App: React.FC = () => {
          // Not implemented
          console.warn("Playbook deletion not implemented", id);
     };
+
+    if (isLoadingAuth) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-200">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+            </div>
+        );
+    }
 
     if (!currentUser) {
         return <Login onLogin={handleLogin} error={loginError} />;
