@@ -30,7 +30,7 @@ class TrafficSimulator:
             "bytes_generated": 0,
             "errors_simulated": 0
         }
-        self.api_url = "http://localhost:8000/traffic"  # Self-referencing
+        self.api_url = "http://127.0.0.1:8000/traffic"  # Use 127.0.0.1 to avoid localhost resolution issues
 
     def start(self, config: SimulationConfig):
         if self._config.is_running:
@@ -173,13 +173,14 @@ class TrafficSimulator:
             # async def create_traffic_log(traffic: schemas.NetworkTrafficCreate, db: Session = Depends(get_db)):
             # So no auth required for this endpoint based on current main.py code.
             
-            requests.post(self.api_url, json=packet_data, timeout=1)
+            logger.info(f"Sending packet to {self.api_url}")
+            requests.post(self.api_url, json=packet_data, timeout=5, proxies={"http": None, "https": None})
             
             self._stats["packets_generated"] += 1
             self._stats["bytes_generated"] += bytes_transferred
             
         except Exception as e:
-            logger.error(f"Failed to send packet: {e}")
+            logger.error(f"Failed to send packet to {self.api_url}: {e}")
 
 # Global instance
 simulator = TrafficSimulator()

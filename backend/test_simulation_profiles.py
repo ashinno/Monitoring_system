@@ -1,8 +1,7 @@
 import requests
-import time
 import uuid
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://127.0.0.1:8000"
 
 def test_simulation_profiles():
     print("Testing Simulation Profiles...")
@@ -22,16 +21,20 @@ def test_simulation_profiles():
     # So we need to login first.
     print("Logging in...")
     login_data = {"username": "admin", "password": "admin"} # Default seeded admin
-    response = requests.post(f"{BASE_URL}/token", data=login_data)
+    
+    # Use no proxies to avoid localhost issues
+    proxies = {"http": None, "https": None}
+    
+    response = requests.post(f"{BASE_URL}/token", data=login_data, proxies=proxies)
     if response.status_code != 200:
-        print(f"Login failed: {response.text}")
+        print(f"Login failed: {response.status_code} - {response.text}")
         return
     
     token = response.json()["accessToken"]
     headers = {"Authorization": f"Bearer {token}"}
     
     print("Creating profile...")
-    response = requests.post(f"{BASE_URL}/simulation/profiles", json=profile_data, headers=headers)
+    response = requests.post(f"{BASE_URL}/simulation/profiles", json=profile_data, headers=headers, proxies=proxies)
     if response.status_code != 200:
         print(f"Failed to create profile: {response.text}")
         return
@@ -41,7 +44,7 @@ def test_simulation_profiles():
     
     # 2. List profiles
     print("Listing profiles...")
-    response = requests.get(f"{BASE_URL}/simulation/profiles", headers=headers)
+    response = requests.get(f"{BASE_URL}/simulation/profiles", headers=headers, proxies=proxies)
     if response.status_code != 200:
         print(f"Failed to list profiles: {response.text}")
         return
@@ -61,14 +64,14 @@ def test_simulation_profiles():
         
     # 3. Delete profile
     print("Deleting profile...")
-    response = requests.delete(f"{BASE_URL}/simulation/profiles/{created_profile['id']}", headers=headers)
+    response = requests.delete(f"{BASE_URL}/simulation/profiles/{created_profile['id']}", headers=headers, proxies=proxies)
     if response.status_code == 200:
         print("Profile deleted successfully.")
     else:
         print(f"Failed to delete profile: {response.text}")
 
     # 4. Verify deletion
-    response = requests.get(f"{BASE_URL}/simulation/profiles", headers=headers)
+    response = requests.get(f"{BASE_URL}/simulation/profiles", headers=headers, proxies=proxies)
     profiles = response.json()
     found = False
     for p in profiles:

@@ -8,6 +8,7 @@ import { LogEntry, RiskLevel, NetworkTraffic } from '../types';
 import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
 import TrafficSimulator from './TrafficSimulator';
+import { io } from 'socket.io-client';
 
 interface DashboardProps {
     logs: LogEntry[];
@@ -41,20 +42,42 @@ const trafficData = Array.from({ length: 24 }, (_, i) => ({
 
 const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
     const [chartData, setChartData] = useState<any[]>(trafficData);
+    const [trafficLogs, setTrafficLogs] = useState<NetworkTraffic[]>([]);
 
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
                 const response = await getNetworkTraffic();
                 if (response.data) {
-                    processTrafficData(response.data);
+                    setTrafficLogs(response.data);
                 }
             } catch (error) {
                 console.error("Failed to fetch traffic logs", error);
             }
         };
         fetchTraffic();
+
+        // Socket connection for real-time traffic
+        const socket = io('http://localhost:8000');
+        socket.on('new_traffic', (data: NetworkTraffic) => {
+             setTrafficLogs(prev => {
+                 const updated = [...prev, data];
+                 // Keep manageable size
+                 if (updated.length > 5000) return updated.slice(-5000);
+                 return updated;
+             });
+        });
+
+        return () => {
+            socket.disconnect();
+        };
     }, []);
+
+    useEffect(() => {
+        if (trafficLogs.length > 0) {
+            processTrafficData(trafficLogs);
+        }
+    }, [trafficLogs]);
 
     const processTrafficData = (data: NetworkTraffic[]) => {
         // Group by hour:minute

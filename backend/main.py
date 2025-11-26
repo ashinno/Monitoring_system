@@ -372,6 +372,12 @@ async def create_traffic_log(traffic: schemas.NetworkTrafficCreate, db: Session 
     db.add(db_traffic)
     db.commit()
     db.refresh(db_traffic)
+
+    # Emit to Socket.IO
+    traffic_response = schemas.NetworkTraffic.model_validate(db_traffic)
+    print(f"Emitting new_traffic event to {traffic_response.id}")
+    await sio.emit('new_traffic', traffic_response.model_dump(by_alias=True))
+
     return db_traffic
 
 @app.get("/traffic", response_model=List[schemas.NetworkTraffic])
