@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from datetime import datetime
 
 class BaseSchema(BaseModel):
@@ -78,6 +78,7 @@ class AnalysisResult(BaseSchema):
     threat_score: float
     recommendations: List[str]
     flagged_logs: List[str]
+    explanations: Optional[Dict[str, Dict[str, float]]] = None
 
 # --- Token Schema ---
 class Token(BaseSchema):

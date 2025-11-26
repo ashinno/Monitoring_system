@@ -3,9 +3,11 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 import joblib
 import os
+import shap
 from datetime import datetime
 
 MODEL_PATH = "anomaly_model.pkl"
+EXPLAINER_PATH = "anomaly_explainer.pkl"
 
 def get_risk_score(risk_level):
     mapping = {
@@ -86,6 +88,11 @@ def train_model(logs):
     
     # Save model
     joblib.dump(clf, MODEL_PATH)
+    
+    # Create and save SHAP explainer
+    explainer = shap.TreeExplainer(clf)
+    joblib.dump(explainer, EXPLAINER_PATH)
+    
     print(f"Model trained on {len(X)} records and saved to {MODEL_PATH}")
 
 def predict_anomaly(new_log):
@@ -109,3 +116,44 @@ def predict_anomaly(new_log):
     except Exception as e:
         print(f"Error in prediction: {e}")
         return 1
+
+def explain_prediction(log_features):
+    """
+    Calculate SHAP values for the specific log entry.
+    log_features: list or array [hour, day, risk_score]
+    Returns: JSON object mapping feature names to their impact score.
+    """
+    if not os.path.exists(EXPLAINER_PATH):
+        return {}
+
+    try:
+        explainer = joblib.load(EXPLAINER_PATH)
+        
+        # shap_values returns a matrix if input is 2D, or list of arrays.
+        # TreeExplainer for IsolationForest:
+        # shap_values shape for single sample: (1, n_features)
+        
+        X_new = np.array([log_features])
+        shap_values = explainer.shap_values(X_new)
+        
+        # shap_values might be a list (one for each class) or array.
+        # For IsolationForest, it usually returns just the values for the score.
+        
+        # Check shape
+        # If shap_values is a list, take the first element (though IsolationForest is usually single output)
+        if isinstance(shap_values, list):
+             shap_values = shap_values[0]
+             
+        # Now shap_values should be (1, n_features)
+        vals = shap_values[0]
+        
+        feature_names = ["hour_of_day", "day_of_week", "risk_score"]
+        
+        explanation = {}
+        for name, val in zip(feature_names, vals):
+            explanation[name] = round(float(val), 4)
+            
+        return explanation
+    except Exception as e:
+        print(f"Error in explanation: {e}")
+        return {}

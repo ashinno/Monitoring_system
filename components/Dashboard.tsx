@@ -7,6 +7,7 @@ import { ShieldAlert, Globe, Users, BrainCircuit, Sparkles, PieChart } from 'luc
 import { LogEntry, RiskLevel, NetworkTraffic } from '../types';
 import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
+import NetworkGraph from './NetworkGraph';
 import TrafficSimulator from './TrafficSimulator';
 import { io } from 'socket.io-client';
 
@@ -300,6 +301,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
             </div>
 
             {/* Network Analysis Module */}
+            <NetworkGraph logs={logs} />
             <TrafficSimulator />
             <NetworkAnalysis />
         </div>

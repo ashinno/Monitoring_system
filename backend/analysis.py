@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
+import ml_engine
 
 def analyze_logs(logs_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not logs_list:
@@ -77,11 +78,28 @@ def analyze_logs(logs_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     # Flagged Logs (return IDs)
     flagged_logs = critical_logs['id'].tolist() if not critical_logs.empty else []
 
+    # Generate SHAP explanations for high-risk logs
+    explanations = {}
+    high_risk_df = df[df['risk_level'].isin(['HIGH', 'CRITICAL'])]
+    
+    for _, row in high_risk_df.iterrows():
+        try:
+            # We need to pass a dict or object to extract_features
+            # row is a Series, let's convert to dict
+            log_dict = row.to_dict()
+            features = ml_engine.extract_features(log_dict)
+            explanation = ml_engine.explain_prediction(features)
+            if explanation:
+                explanations[row['id']] = explanation
+        except Exception as e:
+            print(f"Error explaining log {row.get('id')}: {e}")
+
     return {
         "summary": summary,
         "threat_score": round(threat_score, 2),
         "recommendations": recommendations,
-        "flagged_logs": flagged_logs
+        "flagged_logs": flagged_logs,
+        "explanations": explanations
     }
 
 def analyze_network_traffic(traffic_list: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -33,7 +33,7 @@ const App: React.FC = () => {
                     const userRes = await API.get('/users/me');
                     setCurrentUser(userRes.data);
                 } catch (error) {
-                    console.error("Token validation failed", error);
+                    console.warn("Token validation failed or expired. Redirecting to login.");
                     localStorage.removeItem('token');
                 }
             }
@@ -95,7 +95,12 @@ const App: React.FC = () => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             });
-            localStorage.setItem('token', res.data.accessToken);
+            console.log("Login response:", res.data);
+            const token = res.data.accessToken || res.data.access_token;
+            if (!token) {
+                throw new Error("No access token received");
+            }
+            localStorage.setItem('token', token);
             
             // Get User Details
             const userRes = await API.get('/users/me');
