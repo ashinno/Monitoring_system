@@ -60,6 +60,21 @@ async def lifespan(app: FastAPI):
             db.add(rule1)
             db.commit()
             
+        # Seed Settings if empty
+        if not db.query(models.Settings).first():
+            print("Seeding default settings...")
+            settings = models.Settings(
+                id=1,
+                block_gambling=True,
+                block_social_media=False,
+                enforce_safe_search=True,
+                screen_time_limit=True,
+                alert_on_keywords=True,
+                capture_screenshots=False
+            )
+            db.add(settings)
+            db.commit()
+            
     finally:
         db.close()
     yield
@@ -176,6 +191,36 @@ def read_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), cu
 async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     # Save to DB
     log_data = log.model_dump()
+    
+    # Check Settings for policy enforcement
+    settings = db.query(models.Settings).first()
+    if settings:
+        desc = log_data.get('description', '').lower()
+        details = log_data.get('details', '').lower()
+        
+        # Keyword Alert
+        if settings.alert_on_keywords:
+            keywords = ["password", "confidential", "secret", "key"]
+            if any(k in desc for k in keywords) or any(k in details for k in keywords):
+                 if log_data.get('risk_level') not in ['HIGH', 'CRITICAL']:
+                    log_data['risk_level'] = 'HIGH'
+                    log_data['description'] = log_data['description'] + " [KEYWORD DETECTED]"
+
+        # Gambling Block
+        if settings.block_gambling:
+            gambling_terms = ["casino", "bet", "poker", "gambling", "lottery"]
+            if any(k in desc for k in gambling_terms) or any(k in details for k in gambling_terms):
+                log_data['risk_level'] = 'CRITICAL'
+                log_data['description'] = log_data['description'] + " [POLICY VIOLATION: GAMBLING]"
+
+        # Social Media Block
+        if settings.block_social_media:
+            social_terms = ["facebook", "twitter", "instagram", "tiktok", "linkedin"]
+            if any(k in desc for k in social_terms) or any(k in details for k in social_terms):
+                if log_data.get('risk_level') != 'CRITICAL': # Don't downgrade if already critical (e.g. gambling)
+                    log_data['risk_level'] = 'HIGH'
+                log_data['description'] = log_data['description'] + " [POLICY VIOLATION: SOCIAL MEDIA]"
+
     db_log = models.Log(**log_data)
     db.add(db_log)
     db.commit()
@@ -216,6 +261,33 @@ def read_playbooks(db: Session = Depends(get_db), current_user: models.User = De
             }
         })
     return results
+
+# Settings Routes
+@app.get("/settings", response_model=schemas.Settings)
+def read_settings(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    settings = db.query(models.Settings).first()
+    if not settings:
+        # Should be seeded, but just in case
+        settings = models.Settings(id=1)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+@app.put("/settings", response_model=schemas.Settings)
+def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    db_settings = db.query(models.Settings).first()
+    if not db_settings:
+        db_settings = models.Settings(id=1)
+        db.add(db_settings)
+    
+    update_data = settings.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_settings, key, value)
+        
+    db.commit()
+    db.refresh(db_settings)
+    return db_settings
 
 @app.post("/analyze", response_model=schemas.AnalysisResult)
 def analyze_security_logs(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):

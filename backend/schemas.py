@@ -86,3 +86,18 @@ class Token(BaseSchema):
 
 class TokenData(BaseSchema):
     username: Optional[str] = None
+
+# --- Settings Schemas ---
+class SettingsBase(BaseSchema):
+    block_gambling: bool
+    block_social_media: bool
+    enforce_safe_search: bool
+    screen_time_limit: bool
+    alert_on_keywords: bool
+    capture_screenshots: bool
+
+class SettingsCreate(SettingsBase):
+    pass
+
+class Settings(SettingsBase):
+    id: int

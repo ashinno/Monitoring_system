@@ -29,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
     });
 
     return (
-        <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0 z-10">
+        <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col h-screen flex-shrink-0 z-10">
             <div className="p-6 flex items-center gap-3 border-b border-slate-800">
                 <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center border border-cyan-500/30 text-cyan-400 shadow-neon">
                     <Shield size={24} />
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
                 </div>
             </div>
 
-            <nav className="flex-1 py-4 px-3 space-y-2">
+            <nav className="flex-1 py-4 px-3 space-y-2 overflow-y-auto">
                 {menuItems.map((item) => (
                     <button
                         key={item.id}

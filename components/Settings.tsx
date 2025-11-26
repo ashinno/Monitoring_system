@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle } from 'lucide-react';
+import API from '../services/api';
 
 const Settings: React.FC = () => {
     const [settings, setSettings] = useState({
@@ -13,6 +14,23 @@ const Settings: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SAVED'>('IDLE');
 
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const response = await API.get('/settings');
+                // Backend returns camelCase due to alias_generator
+                // Ensure we only set the keys we care about, or just spread
+                if (response.data) {
+                    const { id, ...rest } = response.data;
+                    setSettings(prev => ({ ...prev, ...rest }));
+                }
+            } catch (error) {
+                console.error("Failed to fetch settings", error);
+            }
+        };
+        fetchSettings();
+    }, []);
+
     const toggle = (key: keyof typeof settings) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }));
     };
@@ -21,13 +39,18 @@ const Settings: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const confirmSave = () => {
+    const confirmSave = async () => {
         setSaveStatus('SAVING');
-        setTimeout(() => {
+        try {
+            await API.put('/settings', settings);
             setSaveStatus('SAVED');
             setIsModalOpen(false);
             setTimeout(() => setSaveStatus('IDLE'), 4000);
-        }, 1500);
+        } catch (error) {
+            console.error("Failed to save settings", error);
+            setSaveStatus('IDLE');
+            setIsModalOpen(false);
+        }
     };
 
     return (

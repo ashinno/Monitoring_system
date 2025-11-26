@@ -38,3 +38,14 @@ class Playbook(Base):
     trigger_value = Column(String)
     action_type = Column(String)
     action_target = Column(String, nullable=True)
+
+class Settings(Base):
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    block_gambling = Column(Boolean, default=True)
+    block_social_media = Column(Boolean, default=False)
+    enforce_safe_search = Column(Boolean, default=True)
+    screen_time_limit = Column(Boolean, default=True)
+    alert_on_keywords = Column(Boolean, default=True)
+    capture_screenshots = Column(Boolean, default=False)
