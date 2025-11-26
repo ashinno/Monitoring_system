@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { BrainCircuit, Sparkles, AlertTriangle, CheckCircle, MessageSquare, Download } from 'lucide-react';
-import { analyzeSecurityLogs, chatWithAnalyst } from '../services/geminiService';
-import { MOCK_LOGS } from '../constants';
+import { chatWithAnalyst } from '../services/geminiService';
 import { AnalysisResult } from '../types';
+import API from '../services/api';
 
 const AIAnalyst: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -14,9 +14,8 @@ const AIAnalyst: React.FC = () => {
     const handleRunAnalysis = async () => {
         setIsAnalyzing(true);
         try {
-            // In a real app, we would fetch fresh logs here
-            const analysis = await analyzeSecurityLogs(MOCK_LOGS);
-            setResult(analysis);
+            const response = await API.post('/analyze');
+            setResult(response.data);
         } catch (e) {
             console.error(e);
             alert("Failed to run AI analysis. Please check console.");
@@ -33,7 +32,9 @@ const AIAnalyst: React.FC = () => {
         setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
         setIsChatting(true);
 
-        const aiResponse = await chatWithAnalyst(userMsg, MOCK_LOGS);
+        // We can keep chatWithAnalyst as is if it calls an external service or mock
+        // Since backend instructions didn't mention chat endpoint, we assume it's still external/mock.
+        const aiResponse = await chatWithAnalyst(userMsg, []); 
         
         setChatHistory(prev => [...prev, { role: 'ai', text: aiResponse }]);
         setIsChatting(false);
@@ -85,7 +86,7 @@ CONFIDENTIAL - INTERNAL USE ONLY
                             Sentinel AI Analyst
                         </h2>
                         <p className="text-slate-400 max-w-lg mb-6">
-                            Leverage Gemini 2.5 Flash models to deep-scan activity logs for subtle behavioral anomalies, insider threats, and policy violations that static rules might miss.
+                            Leverage Local Heuristic Engine (Pandas) to deep-scan activity logs for anomalies and policy violations.
                         </p>
                         
                         <button 
@@ -198,25 +199,25 @@ CONFIDENTIAL - INTERNAL USE ONLY
                              </div>
                          </div>
                      )}
-                </div>
-
-                <div className="p-4 border-t border-slate-800 bg-slate-900/50">
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                            placeholder="Type your query..."
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                        />
-                        <button 
-                            onClick={handleSendMessage}
-                            disabled={isChatting || !chatInput.trim()}
-                            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded transition-colors disabled:opacity-50"
-                        >
-                            <Sparkles size={18} />
-                        </button>
+                    
+                    <div className="mt-4 border-t border-slate-800 pt-4">
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                placeholder="Type your query..."
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                            />
+                            <button 
+                                onClick={handleSendMessage}
+                                disabled={!chatInput.trim() || isChatting}
+                                className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <MessageSquare size={18} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

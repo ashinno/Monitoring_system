@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+python-socketio
+python-multipart
+python-jose
+passlib[bcrypt]
+bcrypt==4.0.1
+pandas
+numpy
