@@ -11,3 +11,6 @@ numpy
 scikit-learn
 joblib
 shap
+psutil
+requests
+fpdf

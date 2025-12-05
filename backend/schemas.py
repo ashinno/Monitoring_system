@@ -97,6 +97,23 @@ class SettingsBase(BaseSchema):
     alert_on_keywords: bool
     capture_screenshots: bool
     keywords: List[str]
+    email_notifications: bool = False
+    notification_email: Optional[str] = None
+    webhook_url: Optional[str] = None
+    quiet_hours_start: Optional[str] = None
+    quiet_hours_end: Optional[str] = None
+
+    # Advanced Notification Settings
+    smtp_server: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    
+    sms_notifications: bool = False
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_from_number: Optional[str] = None
+    twilio_to_number: Optional[str] = None
 
 # --- Prediction Schemas ---
 class PredictionItem(BaseSchema):
@@ -182,3 +199,26 @@ class SimulationProfileCreate(SimulationProfileBase):
 
 class SimulationProfile(SimulationProfileBase):
     id: str
+
+# --- System Monitor Schemas ---
+class CpuMetrics(BaseSchema):
+    usage_percent: float
+
+class MemoryMetrics(BaseSchema):
+    total: int
+    available: int
+    percent: float
+    used: int
+
+class DiskMetrics(BaseSchema):
+    total: int
+    free: int
+    percent: float
+    used: int
+
+class SystemMetrics(BaseSchema):
+    timestamp: str
+    cpu: CpuMetrics
+    memory: MemoryMetrics
+    disk: DiskMetrics
+

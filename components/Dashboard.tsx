@@ -9,6 +9,7 @@ import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
 import NetworkGraph from './NetworkGraph';
 import TrafficSimulator from './TrafficSimulator';
+import SystemMetrics from './SystemMetrics';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -240,6 +241,9 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                     )}
                 </div>
             </div>
+
+            {/* System Metrics */}
+            <SystemMetrics />
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

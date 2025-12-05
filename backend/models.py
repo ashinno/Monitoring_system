@@ -50,6 +50,39 @@ class Settings(Base):
     alert_on_keywords = Column(Boolean, default=True)
     capture_screenshots = Column(Boolean, default=False)
     keywords = Column(JSON, default=["password", "confidential", "secret", "key"])
+    
+    # Notification Settings
+    email_notifications = Column(Boolean, default=False)
+    notification_email = Column(String, nullable=True)
+    webhook_url = Column(String, nullable=True)
+    quiet_hours_start = Column(String, nullable=True) # e.g. "22:00"
+    quiet_hours_end = Column(String, nullable=True) # e.g. "08:00"
+    
+    # Advanced Notification Settings
+    smtp_server = Column(String, nullable=True)
+    smtp_port = Column(Integer, nullable=True)
+    smtp_username = Column(String, nullable=True)
+    smtp_password = Column(String, nullable=True)
+    
+    sms_notifications = Column(Boolean, default=False)
+    twilio_account_sid = Column(String, nullable=True)
+    twilio_auth_token = Column(String, nullable=True)
+    twilio_from_number = Column(String, nullable=True)
+    twilio_to_number = Column(String, nullable=True)
+
+class SystemMetric(Base):
+    __tablename__ = "system_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.now)
+    cpu_usage = Column(Float)
+    memory_total = Column(Integer)
+    memory_used = Column(Integer)
+    memory_percent = Column(Float)
+    disk_total = Column(Integer)
+    disk_used = Column(Integer)
+    disk_percent = Column(Float)
+
 
 class NetworkTraffic(Base):
     __tablename__ = "network_traffic"

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Filter, Download } from 'lucide-react';
 import { LogEntry, RiskLevel, ActivityType } from '../types';
+import ExportModal from './ExportModal';
 
 interface ActivityLogProps {
     logs: LogEntry[];
@@ -9,6 +10,7 @@ interface ActivityLogProps {
 const ActivityLog: React.FC<ActivityLogProps> = ({ logs }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRisk, setFilterRisk] = useState<string>('ALL');
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     const filteredLogs = logs.filter(log => {
         const matchesSearch = log.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -17,46 +19,14 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs }) => {
         return matchesSearch && matchesRisk;
     });
 
-    const handleExportCSV = () => {
-        if (filteredLogs.length === 0) return;
-
-        // CSV Header
-        const headers = ["Timestamp", "User", "Activity Type", "Description", "Details", "Risk Level", "IP Address"];
-        
-        // Map logs to rows
-        const rows = filteredLogs.map(log => [
-            log.timestamp,
-            log.user,
-            log.activityType,
-            `"${log.description.replace(/"/g, '""')}"`, // Escape quotes
-            `"${log.details.replace(/"/g, '""')}"`,
-            log.riskLevel,
-            log.ipAddress || 'N/A'
-        ]);
-
-        // Combine
-        const csvContent = "data:text/csv;charset=utf-8," 
-            + headers.join(",") + "\n" 
-            + rows.map(e => e.join(",")).join("\n");
-
-        // Trigger Download
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `sentinel_logs_${new Date().toISOString()}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
     return (
         <div className="space-y-6 h-full flex flex-col">
+             <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
              <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-white tracking-tight">Live Activity Monitor</h2>
                     <p className="text-slate-400 mt-1 text-sm">Real-time stream of all user and system activities via secure socket.</p>
                 </div>
-                {/* Download Button moved here next to filters as requested in spirit, though technically header is distinct */}
             </div>
 
             {/* Toolbar */}
@@ -91,11 +61,11 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs }) => {
                     <div className="h-8 w-px bg-slate-700 mx-2" />
 
                     <button 
-                        onClick={handleExportCSV}
+                        onClick={() => setIsExportModalOpen(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-sm font-medium border border-slate-700"
                     >
                         <Download size={16} />
-                        Export CSV
+                        Export Data
                     </button>
                 </div>
             </div>

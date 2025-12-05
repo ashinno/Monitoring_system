@@ -11,7 +11,12 @@ import os
 import uuid
 from datetime import datetime
 
-import models, schemas, auth, analysis, database, ml_engine, prediction_engine
+import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications
+
+
+
+
+
 from database import engine
 
 # Create tables
@@ -62,6 +67,16 @@ async def screenshot_loop():
             print(f"Screenshot error: {e}")
             
         await asyncio.sleep(30) # Check every 30 seconds
+
+async def metrics_loop():
+    while True:
+        try:
+            db = database.SessionLocal()
+            system_monitor.save_metric(db)
+            db.close()
+        except Exception as e:
+            print(f"Metrics save error: {e}")
+        await asyncio.sleep(60) # Save every minute
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,6 +148,7 @@ async def lifespan(app: FastAPI):
     # Start screenshot task
     # Trigger reload
     asyncio.create_task(screenshot_loop())
+    asyncio.create_task(metrics_loop())
     
     # Train Prediction Engine
     print("Training Prediction Engine...")
@@ -305,6 +321,10 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     # schemas.Log.model_validate(db_log).model_dump(by_alias=True) will give camelCase
     log_response = schemas.Log.model_validate(db_log)
     await sio.emit('new_log', log_response.model_dump(by_alias=True))
+
+    # Notifications
+    if settings and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
+        notifications.send_alert(db_log, settings)
     
     # --- Prediction Integration ---
     try:
@@ -494,6 +514,35 @@ def delete_simulation_profile(profile_id: str, db: Session = Depends(get_db), _:
     db.delete(db_profile)
     db.commit()
     return {"ok": True}
+
+# --- System Monitor Routes ---
+@app.get("/api/system-metrics", response_model=schemas.SystemMetrics)
+def get_system_metrics(_: models.User = Depends(auth.get_current_user)):
+    return system_monitor.get_system_metrics()
+
+@app.get("/api/system-metrics/history", response_model=List[schemas.SystemMetrics])
+def get_system_metrics_history(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    return system_monitor.get_history(db)
+
+# --- Reporting Routes ---
+@app.get("/api/reports/export")
+def export_data(format: str = "csv", compress: bool = False, start_date: str = None, end_date: str = None, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    query = db.query(models.Log)
+    
+    if start_date:
+        query = query.filter(models.Log.timestamp >= start_date)
+    if end_date:
+        query = query.filter(models.Log.timestamp <= end_date)
+        
+    logs = query.all()
+    return reporting.export_logs(logs, format, compress)
+
+@app.post("/api/notifications/test")
+def test_notification(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    settings = db.query(models.Settings).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Settings not found")
+    return notifications.test_notification(settings)
 
 # Wrap FastAPI with Socket.IO
 app = socketio.ASGIApp(sio, other_asgi_app=app)

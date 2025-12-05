@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle, Plus, Trash2 } from 'lucide-react';
+import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle, Plus, Trash2, Mail, MessageSquare, Server } from 'lucide-react';
 import API from '../services/api';
 
 const Settings: React.FC = () => {
@@ -10,11 +10,27 @@ const Settings: React.FC = () => {
         screenTimeLimit: true,
         alertOnKeywords: true,
         captureScreenshots: false,
-        keywords: [] as string[]
+        keywords: [] as string[],
+        emailNotifications: false,
+        notificationEmail: "",
+        webhookUrl: "",
+        quietHoursStart: "",
+        quietHoursEnd: "",
+        // Advanced Notifications
+        smtpServer: "",
+        smtpPort: 587,
+        smtpUsername: "",
+        smtpPassword: "",
+        smsNotifications: false,
+        twilioAccountSid: "",
+        twilioAuthToken: "",
+        twilioFromNumber: "",
+        twilioToNumber: ""
     });
     const [newKeyword, setNewKeyword] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SAVED'>('IDLE');
+    const [testResult, setTestResult] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -69,9 +85,22 @@ const Settings: React.FC = () => {
             setIsModalOpen(false);
         }
     };
+    
+    const handleTestNotification = async () => {
+        try {
+            // Save first to ensure backend tests latest config
+            await API.put('/settings', settings);
+            const response = await API.post('/notifications/test');
+            setTestResult(JSON.stringify(response.data, null, 2));
+            setTimeout(() => setTestResult(null), 5000);
+        } catch (error) {
+            console.error("Test failed", error);
+            setTestResult("Test failed: " + String(error));
+        }
+    };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn relative">
+        <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn relative pb-20">
             
             {/* Success Feedback Banner */}
             {saveStatus === 'SAVED' && (
@@ -79,6 +108,20 @@ const Settings: React.FC = () => {
                     <div className="bg-green-500/10 backdrop-blur-md border border-green-500/40 text-green-400 p-3 rounded-lg flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(34,197,94,0.2)]">
                         <CheckCircle size={20} />
                         <span className="font-semibold">Settings saved successfully! System policies have been updated.</span>
+                    </div>
+                </div>
+            )}
+            
+            {testResult && (
+                 <div className="fixed bottom-10 right-10 z-50 animate-slideUp max-w-md w-full">
+                    <div className="bg-slate-800 border border-slate-600 p-4 rounded-xl shadow-2xl">
+                        <div className="flex justify-between items-center mb-2">
+                             <h4 className="text-white font-semibold">Notification Test Result</h4>
+                             <button onClick={() => setTestResult(null)}><X size={16} className="text-slate-400" /></button>
+                        </div>
+                        <pre className="text-xs text-green-400 overflow-auto max-h-40 bg-black/30 p-2 rounded">
+                            {testResult}
+                        </pre>
                     </div>
                 </div>
             )}
@@ -180,11 +223,19 @@ const Settings: React.FC = () => {
 
                 {/* Notifications */}
                 <div className="glass-panel p-6 rounded-xl border-t-4 border-t-yellow-500 md:col-span-2">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 bg-slate-900 rounded border border-slate-800 text-yellow-400">
-                            <Bell size={20} />
+                    <div className="flex items-center justify-between mb-6">
+                         <div className="flex items-center gap-3">
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800 text-yellow-400">
+                                <Bell size={20} />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white">Alert Configuration</h3>
                         </div>
-                        <h3 className="text-lg font-semibold text-white">Alert Configuration</h3>
+                        <button 
+                            onClick={handleTestNotification}
+                            className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded border border-slate-600 transition-colors"
+                        >
+                            Test Notifications
+                        </button>
                     </div>
                     
                     <div className="flex items-center justify-between p-4 bg-slate-900/40 rounded-lg">
@@ -201,7 +252,7 @@ const Settings: React.FC = () => {
                     </div>
 
                     {settings.alertOnKeywords && (
-                        <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800">
+                        <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800 mt-2 mb-6">
                             <h4 className="text-slate-300 text-sm font-semibold mb-3">Monitored Keywords</h4>
                             
                             <div className="flex gap-2 mb-3">
@@ -239,65 +290,222 @@ const Settings: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    <div className="mt-6 space-y-6">
+                        {/* Email Settings */}
+                        <div className="space-y-3">
+                             <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <Mail size={16} className="text-slate-400"/>
+                                    <div>
+                                        <p className="text-slate-200 font-medium">Email Notifications</p>
+                                        <p className="text-slate-500 text-xs">Receive alerts via SMTP</p>
+                                    </div>
+                                </div>
+                                 <button 
+                                    onClick={() => toggle('emailNotifications')}
+                                    className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.emailNotifications ? 'bg-yellow-600' : 'bg-slate-700'}`}
+                                >
+                                    <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.emailNotifications ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                            
+                            {settings.emailNotifications && (
+                                <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="text-slate-400 text-xs mb-1 block">Notification Email</label>
+                                        <input 
+                                            type="email" 
+                                            value={settings.notificationEmail || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, notificationEmail: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                            placeholder="admin@example.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">SMTP Server</label>
+                                        <input 
+                                            type="text" 
+                                            value={settings.smtpServer || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, smtpServer: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                            placeholder="smtp.gmail.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">SMTP Port</label>
+                                        <input 
+                                            type="number" 
+                                            value={settings.smtpPort || 587}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, smtpPort: parseInt(e.target.value) }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                            placeholder="587"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">SMTP Username</label>
+                                        <input 
+                                            type="text" 
+                                            value={settings.smtpUsername || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, smtpUsername: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">SMTP Password</label>
+                                        <input 
+                                            type="password" 
+                                            value={settings.smtpPassword || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, smtpPassword: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* SMS Settings */}
+                        <div className="space-y-3">
+                             <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <MessageSquare size={16} className="text-slate-400"/>
+                                    <div>
+                                        <p className="text-slate-200 font-medium">SMS Notifications</p>
+                                        <p className="text-slate-500 text-xs">Receive alerts via Twilio</p>
+                                    </div>
+                                </div>
+                                 <button 
+                                    onClick={() => toggle('smsNotifications')}
+                                    className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.smsNotifications ? 'bg-yellow-600' : 'bg-slate-700'}`}
+                                >
+                                    <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.smsNotifications ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                            
+                            {settings.smsNotifications && (
+                                <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="text-slate-400 text-xs mb-1 block">Twilio Account SID</label>
+                                        <input 
+                                            type="text" 
+                                            value={settings.twilioAccountSid || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, twilioAccountSid: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-slate-400 text-xs mb-1 block">Twilio Auth Token</label>
+                                        <input 
+                                            type="password" 
+                                            value={settings.twilioAuthToken || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, twilioAuthToken: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">From Number</label>
+                                        <input 
+                                            type="text" 
+                                            value={settings.twilioFromNumber || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, twilioFromNumber: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                            placeholder="+1234567890"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-slate-400 text-xs mb-1 block">To Number</label>
+                                        <input 
+                                            type="text" 
+                                            value={settings.twilioToNumber || ""}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, twilioToNumber: e.target.value }))}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                            placeholder="+1987654321"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Webhook */}
+                        <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Server size={16} className="text-slate-400"/>
+                                <label className="text-slate-400 text-xs block">Webhook URL (Slack/Discord)</label>
+                            </div>
+                            <input 
+                                type="text" 
+                                value={settings.webhookUrl || ""}
+                                onChange={(e) => setSettings(prev => ({ ...prev, webhookUrl: e.target.value }))}
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                placeholder="https://hooks.slack.com/services/..."
+                            />
+                        </div>
+
+                        <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800">
+                            <p className="text-slate-200 font-medium mb-2">Quiet Hours</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-slate-500 text-xs mb-1 block">Start Time</label>
+                                    <input 
+                                        type="time" 
+                                        value={settings.quietHoursStart || ""}
+                                        onChange={(e) => setSettings(prev => ({ ...prev, quietHoursStart: e.target.value }))}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-slate-500 text-xs mb-1 block">End Time</label>
+                                    <input 
+                                        type="time" 
+                                        value={settings.quietHoursEnd || ""}
+                                        onChange={(e) => setSettings(prev => ({ ...prev, quietHoursEnd: e.target.value }))}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-yellow-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div className="flex justify-end pt-4">
+             {/* Save Button */}
+             <div className="fixed bottom-6 right-6 z-30">
                 <button 
                     onClick={handleSaveClick}
-                    className="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all shadow-neon"
+                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-6 py-3 rounded-full shadow-lg shadow-cyan-500/20 flex items-center gap-2 font-semibold transition-all transform hover:scale-105"
                 >
-                    <Save size={18} />
-                    {saveStatus === 'SAVED' ? 'Configuration Saved' : 'Save Configuration'}
+                    <Save size={20} />
+                    Save Changes
                 </button>
             </div>
 
             {/* Confirmation Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-                    
-                    <div className="relative bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-md w-full shadow-2xl animate-fadeIn">
-                        <button 
-                            onClick={() => setIsModalOpen(false)}
-                            className="absolute top-4 right-4 text-slate-500 hover:text-white"
-                        >
-                            <X size={20} />
-                        </button>
-
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/30">
-                                <AlertTriangle className="text-yellow-500" size={24} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-sm w-full shadow-2xl">
+                        <div className="flex flex-col items-center text-center mb-6">
+                            <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mb-4 text-yellow-500">
+                                <AlertTriangle size={32} />
                             </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-white">Confirm Changes</h3>
-                                <p className="text-sm text-slate-400">System policy update</p>
-                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Confirm Changes</h3>
+                            <p className="text-slate-400 text-sm">
+                                Are you sure you want to update system policies? New settings will be enforced immediately across all monitored devices.
+                            </p>
                         </div>
-
-                        <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                            Are you sure you want to save these settings? 
-                            Applying these changes will immediately affect all monitored devices and may interrupt active user sessions.
-                        </p>
-
-                        <div className="flex justify-end gap-3">
+                        
+                        <div className="flex gap-3">
                             <button 
                                 onClick={() => setIsModalOpen(false)}
-                                className="px-4 py-2 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors text-sm font-medium"
+                                className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button 
                                 onClick={confirmSave}
                                 disabled={saveStatus === 'SAVING'}
-                                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold shadow-lg shadow-cyan-900/20 flex items-center gap-2"
+                                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
                             >
-                                {saveStatus === 'SAVING' ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Applying...
-                                    </>
-                                ) : 'Confirm Update'}
+                                {saveStatus === 'SAVING' ? 'Saving...' : 'Confirm'}
                             </button>
                         </div>
                     </div>
