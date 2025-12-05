@@ -41,6 +41,9 @@ class LogBase(BaseSchema):
     details: str
     ip_address: Optional[str] = None
     location: Optional[str] = None
+    # New fields for Contextual Activity Recognition
+    current_activity: Optional[str] = None
+    activity_summary: Optional[str] = None
 
 class LogCreate(LogBase):
     pass

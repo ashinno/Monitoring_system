@@ -11,7 +11,7 @@ import os
 import uuid
 import httpx
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications
 
@@ -23,6 +23,79 @@ from database import engine
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
+
+import base64
+
+# ...
+
+async def analyze_screenshot_context(filepath: str, db: Session):
+    """
+    Uses Ollama (qwen3:8b) to analyze the screenshot + recent logs to infer user activity.
+    """
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+    
+    # 1. Encode Image to Base64
+    try:
+        with open(filepath, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Error reading screenshot for analysis: {e}")
+        return None, None
+
+    # 2. Get Recent Metadata (Logs)
+    # We want logs from the last 5 minutes to give context
+    five_mins_ago = datetime.now() - timedelta(minutes=5)
+    recent_logs = db.query(models.Log).filter(models.Log.timestamp >= five_mins_ago).order_by(models.Log.timestamp.desc()).limit(10).all()
+    
+    metadata_context = "\n".join([f"[{l.timestamp}] {l.activity_type}: {l.description}" for l in recent_logs])
+    if not metadata_context:
+        metadata_context = "No recent logs."
+
+    # 3. Prompt for Ollama
+    # Note: Qwen 3 (or Qwen 2.5) supports vision if using the VL variant, but standard text models can't see images.
+    # Assuming user has a vision-capable model or we are using the "images" parameter of Ollama API which is standard for multimodal models.
+    
+    prompt = f"""
+    You are an AI Activity Recognition Engine.
+    
+    Input:
+    1. Visual Snapshot of the user's screen (attached).
+    2. Recent System Logs (Metadata):
+    {metadata_context}
+    
+    Task:
+    Analyze the visual content and the logs to infer exactly what the user is doing.
+    
+    Output strictly valid JSON:
+    {{
+        "CurrentActivity": "Short label (e.g. 'Coding in Python', 'Writing Email')",
+        "Summary": "A concise 1-sentence description of the observed behavior."
+    }}
+    """
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Ollama 'generate' endpoint supports 'images' list (base64)
+            response = await client.post(OLLAMA_URL, json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "images": [encoded_string] 
+            }, timeout=30.0)
+            
+            if response.status_code == 200:
+                result = response.json()
+                ai_data = json.loads(result['response'])
+                return ai_data.get("CurrentActivity"), ai_data.get("Summary")
+            else:
+                print(f"Ollama Analysis Failed: {response.status_code} - {response.text}")
+                return None, None
+
+    except Exception as e:
+        print(f"Context Analysis Error: {e}")
+        return None, None
 
 async def screenshot_loop():
     while True:
@@ -46,6 +119,9 @@ async def screenshot_loop():
                 await proc.communicate()
                 
                 if proc.returncode == 0:
+                    # --- Contextual Analysis ---
+                    current_activity, activity_summary = await analyze_screenshot_context(filepath, db)
+                    
                     log = models.Log(
                         id=str(uuid.uuid4()),
                         timestamp=datetime.now().isoformat(),
@@ -55,7 +131,9 @@ async def screenshot_loop():
                         description="Periodic Screenshot Captured",
                         details=f"/screenshots/{filename}",
                         ip_address="127.0.0.1",
-                        location="Local"
+                        location="Local",
+                        current_activity=current_activity,
+                        activity_summary=activity_summary
                     )
                     db.add(log)
                     db.commit()
@@ -468,6 +546,8 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
         ]
     }}
     If no actions are needed, set "actions" to [].
+    
+    IMPORTANT: If your text response recommends taking a specific action (like blocking an IP or resetting a password), YOU MUST include that action in the 'actions' array so the user can click it.
     """
     
     try:
@@ -514,19 +594,71 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
         )
 
 @app.post("/analyze", response_model=schemas.AnalysisResult)
-def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+async def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     # Fetch all logs for analysis
-    # In production, might limit to last 24h or similar
-    logs = db.query(models.Log).all()
+    # Limit to last 100 for performance in demo but "real" data
+    logs = db.query(models.Log).order_by(models.Log.timestamp.desc()).limit(100).all()
     
     # Convert to list of dicts for pandas
-    # We want camelCase keys to match what analysis.py logic might expect (or update analysis.py)
-    # analysis.py handles snake_case now (I updated it).
-    logs_data = [l.__dict__ for l in logs] 
-    # __dict__ includes sqlalchemy internal state, better to use Pydantic
     logs_data = [schemas.Log.model_validate(l).model_dump() for l in logs]
     
+    # Perform heuristic analysis first (pandas)
     result = analysis.analyze_logs(logs_data)
+    
+    # --- Enhanced AI Analysis (Ollama) ---
+    # If threat score is elevated, get a "second opinion" from AI
+    if result['threat_score'] > 30:
+        try:
+            OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+            MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+            
+            # Summarize logs for AI context
+            summary_context = json.dumps(logs_data[:15], default=str) # Top 15 most recent logs
+            
+            prompt = f"""
+            You are a senior security analyst.
+            Review the following recent system logs and the preliminary heuristic analysis.
+            
+            Heuristic Summary: {result['summary']}
+            Heuristic Threat Score: {result['threat_score']}
+            
+            Recent Logs:
+            {summary_context}
+            
+            Task:
+            1. Provide a more detailed executive summary based on the specific logs.
+            2. Suggest 3 concrete, technical recommendations.
+            
+            Return strictly valid JSON:
+            {{
+                "ai_summary": "Detailed summary...",
+                "ai_recommendations": ["Rec 1", "Rec 2", "Rec 3"]
+            }}
+            """
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(OLLAMA_URL, json={
+                    "model": MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                }, timeout=20.0)
+                
+                if response.status_code == 200:
+                    ai_data = json.loads(response.json()['response'])
+                    
+                    # Merge AI insights
+                    if ai_data.get('ai_summary'):
+                        result['summary'] = f"[AI ENHANCED] {ai_data['ai_summary']}"
+                    
+                    if ai_data.get('ai_recommendations'):
+                        # Prepend AI recommendations
+                        result['recommendations'] = ai_data['ai_recommendations'] + result['recommendations']
+                        
+        except Exception as e:
+            print(f"AI Enhanced Analysis Failed: {e}")
+            # Fallback to heuristic result (already calculated)
+
     return result
 
 @app.get("/predict", response_model=schemas.PredictionResult)

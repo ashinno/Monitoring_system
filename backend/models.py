@@ -23,9 +23,13 @@ class Log(Base):
     activity_type = Column(String)
     risk_level = Column(String)
     description = Column(String)
-    details = Column(Text)
+    details = Column(String)
     ip_address = Column(String, nullable=True)
     location = Column(String, nullable=True)
+    
+    # Contextual Activity Recognition
+    current_activity = Column(String, nullable=True)
+    activity_summary = Column(String, nullable=True)
 
 class Playbook(Base):
     __tablename__ = "playbooks"

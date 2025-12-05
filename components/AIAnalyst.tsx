@@ -60,7 +60,13 @@ const AIAnalyst: React.FC = () => {
                     target: action.target,
                     reason: action.reason
                 });
-                alert(`SUCCESS: ${res.data.message}`);
+                
+                // Add system response to chat
+                setChatHistory(prev => [...prev, {
+                    role: 'ai',
+                    text: `✅ ACTION EXECUTED: ${res.data.message}`,
+                    actions: []
+                }]);
             }
         } catch (e) {
             console.error("Action Execution Failed", e);
@@ -252,7 +258,7 @@ CONFIDENTIAL - INTERNAL USE ONLY
                          </div>
                      )}
                     
-                    <div className="mt-4 border-t border-slate-800 pt-4">
+                    <div className="mt-auto border-t border-slate-800 pt-4 p-4 bg-slate-900/50">
                         <div className="flex gap-2">
                             <input 
                                 type="text" 
