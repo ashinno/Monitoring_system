@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Filter, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Download, Sparkles, MessageSquare } from 'lucide-react';
 import { LogEntry, RiskLevel, ActivityType } from '../types';
 import ExportModal from './ExportModal';
+import { chatWithAI } from '../services/api';
 
 interface ActivityLogProps {
     logs: LogEntry[];
@@ -11,6 +12,10 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRisk, setFilterRisk] = useState<string>('ALL');
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    
+    // AI Live Feed State
+    const [aiFeed, setAiFeed] = useState<string>("Initializing AI Overwatch...");
+    const [isAiThinking, setIsAiThinking] = useState(false);
 
     const filteredLogs = logs.filter(log => {
         const matchesSearch = log.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -19,13 +24,67 @@ const ActivityLog: React.FC<ActivityLogProps> = ({ logs }) => {
         return matchesSearch && matchesRisk;
     });
 
+    // Effect to trigger AI description on new significant logs
+    useEffect(() => {
+        const describeActivity = async () => {
+            // Only react to the latest log if it exists
+            if (logs.length === 0) return;
+            const latestLog = logs[0];
+            
+            // Rate limiting logic could go here, for now we just debounce visually
+            setIsAiThinking(true);
+            try {
+                const prompt = `
+                Describe this security event briefly and dramatically like a cyberpunk system announcer:
+                User: ${latestLog.user}
+                Action: ${latestLog.description}
+                Risk: ${latestLog.riskLevel}
+                Details: ${latestLog.details}
+                `;
+                
+                // We use the chat endpoint but ignore actions for this feed
+                const res = await chatWithAI(prompt, []);
+                if (res.data.text) {
+                    setAiFeed(res.data.text);
+                }
+            } catch (e) {
+                console.error("AI Feed Error", e);
+            } finally {
+                setIsAiThinking(false);
+            }
+        };
+
+        // Trigger only on new log arrival (if logs prop changes length or top item changes)
+        describeActivity();
+    }, [logs]); // Warning: this might trigger often. Ideally check logs[0].id
+
     return (
         <div className="space-y-6 h-full flex flex-col">
              <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+             
              <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-white tracking-tight">Live Activity Monitor</h2>
                     <p className="text-slate-400 mt-1 text-sm">Real-time stream of all user and system activities via secure socket.</p>
+                </div>
+            </div>
+
+            {/* AI Live Description Banner */}
+            <div className="relative overflow-hidden rounded-xl border border-cyan-500/30 bg-slate-900/80 p-4 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+                <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500 animate-pulse" />
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20 text-cyan-400 mt-1">
+                        <Sparkles size={20} className={isAiThinking ? "animate-spin" : ""} />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-xs font-bold text-cyan-500 uppercase tracking-widest mb-1 flex items-center gap-2">
+                            AI Overwatch Feed
+                            {isAiThinking && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />}
+                        </h3>
+                        <p className="text-slate-200 font-mono text-sm leading-relaxed transition-all duration-300">
+                            {aiFeed}
+                        </p>
+                    </div>
                 </div>
             </div>
 

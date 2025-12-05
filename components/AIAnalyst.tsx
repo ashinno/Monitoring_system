@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { BrainCircuit, Sparkles, AlertTriangle, CheckCircle, MessageSquare, Download } from 'lucide-react';
-import { chatWithAnalyst } from '../services/geminiService';
-import { AnalysisResult } from '../types';
-import API from '../services/api';
+import { BrainCircuit, Sparkles, AlertTriangle, CheckCircle, MessageSquare, Download, ShieldAlert, Lock, Network } from 'lucide-react';
+import { AnalysisResult, ChatMessage, ActionCard } from '../types';
+import API, { chatWithAI } from '../services/api';
 
 const AIAnalyst: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([]);
+    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [isChatting, setIsChatting] = useState(false);
 
     const handleRunAnalysis = async () => {
@@ -32,12 +31,41 @@ const AIAnalyst: React.FC = () => {
         setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
         setIsChatting(true);
 
-        // We can keep chatWithAnalyst as is if it calls an external service or mock
-        // Since backend instructions didn't mention chat endpoint, we assume it's still external/mock.
-        const aiResponse = await chatWithAnalyst(userMsg, []); 
-        
-        setChatHistory(prev => [...prev, { role: 'ai', text: aiResponse }]);
-        setIsChatting(false);
+        try {
+            // Call Backend Chat Endpoint (Ollama)
+            const response = await chatWithAI(userMsg, []); // Context could be passed here
+            setChatHistory(prev => [...prev, response.data]);
+        } catch (e) {
+            console.error("Chat Error", e);
+            setChatHistory(prev => [...prev, { 
+                role: 'ai', 
+                text: "Error connecting to AI service. Ensure the backend is running and connected to Ollama." 
+            }]);
+        } finally {
+            setIsChatting(false);
+        }
+    };
+
+    const handleExecuteAction = async (action: ActionCard) => {
+        if (!confirm(`Are you sure you want to ${action.label} for ${action.target}?`)) return;
+
+        try {
+            let endpoint = '';
+            if (action.type === 'BLOCK_IP') endpoint = '/actions/block-ip';
+            else if (action.type === 'ISOLATE_HOST') endpoint = '/actions/isolate-host';
+            else if (action.type === 'RESET_PASSWORD') endpoint = '/actions/reset-password';
+            
+            if (endpoint) {
+                const res = await API.post(endpoint, {
+                    target: action.target,
+                    reason: action.reason
+                });
+                alert(`SUCCESS: ${res.data.message}`);
+            }
+        } catch (e) {
+            console.error("Action Execution Failed", e);
+            alert("Failed to execute action. Check console.");
+        }
     };
 
     const handleExportReport = () => {
@@ -184,7 +212,31 @@ CONFIDENTIAL - INTERNAL USE ONLY
                                     ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/30 rounded-br-none' 
                                     : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'
                             }`}>
-                                {msg.text}
+                                <div>{msg.text}</div>
+                                
+                                {/* Action Cards */}
+                                {msg.actions && msg.actions.length > 0 && (
+                                    <div className="mt-3 pt-3 border-t border-slate-700 grid gap-2">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Recommended Actions</p>
+                                        {msg.actions.map((action, aIdx) => (
+                                            <button 
+                                                key={aIdx}
+                                                onClick={() => handleExecuteAction(action)}
+                                                className="group flex items-center gap-3 bg-slate-900/50 hover:bg-cyan-900/30 border border-slate-700 hover:border-cyan-500/50 p-3 rounded-lg transition-all text-left"
+                                            >
+                                                <div className={`p-2 rounded bg-slate-800 group-hover:bg-cyan-900/50 text-cyan-400`}>
+                                                    {action.type === 'BLOCK_IP' && <ShieldAlert size={16} />}
+                                                    {action.type === 'ISOLATE_HOST' && <Network size={16} />}
+                                                    {action.type === 'RESET_PASSWORD' && <Lock size={16} />}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-slate-200 group-hover:text-cyan-300 text-xs">{action.label}</div>
+                                                    <div className="text-[10px] text-slate-500">Target: <span className="font-mono text-slate-400">{action.target}</span></div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

@@ -222,3 +222,30 @@ class SystemMetrics(BaseSchema):
     memory: MemoryMetrics
     disk: DiskMetrics
 
+# --- Action Schemas ---
+class ActionRequest(BaseSchema):
+    target: str  # IP, User ID, Host ID
+    reason: Optional[str] = None
+    duration: Optional[int] = None # For temporary blocks
+
+class ActionResponse(BaseSchema):
+    success: bool
+    message: str
+    action_id: str
+
+# --- Chat Schemas ---
+class ChatRequest(BaseSchema):
+    message: str
+    context: List[Dict[str, Any]] = []
+
+class ActionCard(BaseSchema):
+    type: str
+    label: str
+    target: str
+    reason: str
+
+class ChatResponse(BaseSchema):
+    role: str
+    text: str
+    actions: Optional[List[ActionCard]] = None
+

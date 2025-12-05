@@ -2,6 +2,10 @@ from collections import defaultdict, Counter
 from sqlalchemy.orm import Session
 import models
 from typing import List, Dict, Any
+import os
+import httpx
+import asyncio
+import json
 
 class MarkovPredictor:
     def __init__(self):
@@ -41,9 +45,49 @@ class MarkovPredictor:
         self.is_trained = True
         print(f"Markov Chain Predictor trained on {len(logs)} logs.")
 
+    async def predict_next_step_ai(self, current_activity: str) -> List[Dict[str, Any]]:
+        """
+        Uses Ollama AI to predict the next likely security event/action based on context.
+        """
+        OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+        MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        
+        prompt = f"""
+        You are a predictive security engine.
+        Current User Activity: {current_activity}
+        
+        Based on typical cybersecurity attack patterns (e.g., Mitre ATT&CK), predict the 3 most likely NEXT steps a malicious actor might take.
+        
+        Return strictly valid JSON format:
+        [
+            {{"activity": "Next Action Name", "probability": 0.85, "reason": "Explanation"}},
+            {{"activity": "Alternative Action", "probability": 0.10, "reason": "Explanation"}}
+        ]
+        """
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(OLLAMA_URL, json={
+                    "model": MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                }, timeout=10.0)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    predictions = json.loads(result['response'])
+                    # Normalize keys if needed
+                    return predictions
+        except Exception as e:
+            print(f"AI Prediction Error: {e}")
+            return []
+        
+        return []
+
     def predict_next_step(self, current_activity: str) -> List[Dict[str, Any]]:
         """
-        Predicts the top 3 most likely next actions based on the current activity.
+        Predicts the top 3 most likely next actions based on the current activity using Markov Chain.
         """
         if not self.is_trained:
             # If not trained, return empty or default? 
@@ -61,7 +105,8 @@ class MarkovPredictor:
             prob = count / total_count
             probabilities.append({
                 "activity": activity,
-                "probability": prob
+                "probability": prob,
+                "reason": "Based on historical frequency"
             })
         
         # Sort by probability desc

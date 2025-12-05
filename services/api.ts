@@ -17,6 +17,8 @@ export const getNetworkAnalysis = () => API.get('/traffic/analyze');
 export const getSystemMetrics = () => API.get('/api/system-metrics');
 export const getSystemMetricsHistory = () => API.get('/api/system-metrics/history');
 
+export const chatWithAI = (message: string, context: any[]) => API.post('/chat', { message, context });
+
 export const exportData = (format: string, compress: boolean, startDate?: string, endDate?: string) => 
     API.get(`/api/reports/export?format=${format}&compress=${compress}${startDate ? `&start_date=${startDate}` : ''}${endDate ? `&end_date=${endDate}` : ''}`, { responseType: 'blob' });
 

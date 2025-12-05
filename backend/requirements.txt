@@ -14,3 +14,4 @@ shap
 psutil
 requests
 fpdf
+httpx

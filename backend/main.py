@@ -9,6 +9,8 @@ import uvicorn
 import asyncio
 import os
 import uuid
+import httpx
+import json
 from datetime import datetime
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications
@@ -330,16 +332,31 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     try:
         current_activity = log_data.get('activity_type')
         if current_activity:
-            next_steps = prediction_engine.predictor.predict_next_step(current_activity)
+            # Hybrid Prediction: Try AI first, fallback to Markov if slow/fails or for comparison
+            # For real-time performance, we might race them or prioritize one.
+            # Here we will try AI if risk is HIGH+, otherwise standard Markov.
+            
+            next_steps = []
+            if log_data.get('risk_level') in ['HIGH', 'CRITICAL']:
+                 print(f"High Risk Activity detected ({current_activity}). Invoking AI Prediction...")
+                 next_steps = await prediction_engine.predictor.predict_next_step_ai(current_activity)
+            
+            if not next_steps:
+                # Fallback or standard
+                next_steps = prediction_engine.predictor.predict_next_step(current_activity)
             
             # Check for High Risk Predictions
             for step in next_steps:
-                if step['activity'] == 'Data Exfiltration' and step['probability'] >= 0.8:
-                    print("PRE-EMPTIVE WARNING: High probability of Data Exfiltration!")
+                # AI usually returns 'activity', Markov returns 'activity'
+                act = step.get('activity', 'Unknown')
+                prob = step.get('probability', 0.0)
+                
+                if prob >= 0.7: # Threshold
+                    print(f"PRE-EMPTIVE WARNING: High probability of {act}!")
                     await sio.emit('security_alert', {
                         "type": "PREDICTIVE_THREAT",
-                        "message": "High probability of Data Exfiltration detected based on current activity.",
-                        "details": f"Following {current_activity}, there is a {step['probability']*100:.1f}% chance of Data Exfiltration.",
+                        "message": f"High probability of {act} detected.",
+                        "details": f"Following {current_activity}, there is a {prob*100:.1f}% chance of {act}. Reason: {step.get('reason', 'Pattern Analysis')}",
                         "timestamp": datetime.now().isoformat()
                     })
 
@@ -413,6 +430,88 @@ def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(db_settings)
     return db_settings
+
+@app.post("/chat", response_model=schemas.ChatResponse)
+async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depends(auth.get_current_user)):
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    # Updated default model to qwen3:8b as requested
+    MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+    
+    # Serialize context safely
+    try:
+        context_str = json.dumps(request.context[:10], default=str)
+    except:
+        context_str = "[]"
+    
+    prompt = f"""
+    You are Sentinel AI, a cybersecurity expert.
+    Context Logs: {context_str}
+    User Question: {request.message}
+    
+    Analyze the question and logs. Provide a helpful response and suggest actions if needed.
+    
+    Available Actions (type):
+    - BLOCK_IP (target: IP)
+    - ISOLATE_HOST (target: Hostname/ID)
+    - RESET_PASSWORD (target: Username)
+    
+    You MUST respond with a valid JSON object using this schema:
+    {{
+        "text": "Your textual answer here",
+        "actions": [
+            {{
+                "type": "BLOCK_IP",
+                "label": "Block IP 1.2.3.4",
+                "target": "1.2.3.4",
+                "reason": "Suspicious activity"
+            }}
+        ]
+    }}
+    If no actions are needed, set "actions" to [].
+    """
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Check if Ollama is up
+            try:
+                response = await client.post(OLLAMA_URL, json={
+                    "model": MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                }, timeout=60.0) # Longer timeout for local inference
+            except httpx.ConnectError:
+                 return schemas.ChatResponse(
+                    role="ai",
+                    text=f"[System] Failed to connect to Ollama (Local AI). Please ensure 'ollama serve' is running and '{MODEL}' model is pulled.",
+                    actions=[]
+                )
+
+            if response.status_code != 200:
+                print(f"Ollama Error: {response.text}")
+                return schemas.ChatResponse(
+                    role="ai",
+                    text=f"Error communicating with AI Engine ({response.status_code}).",
+                    actions=[]
+                )
+                
+            result = response.json()
+            # Ollama returns 'response' field
+            ai_content = json.loads(result['response'])
+            
+            return schemas.ChatResponse(
+                role="ai",
+                text=ai_content.get('text', 'No text provided.'),
+                actions=ai_content.get('actions', [])
+            )
+            
+    except Exception as e:
+        print(f"AI Chat Error: {e}")
+        return schemas.ChatResponse(
+            role="ai",
+            text="[System] Internal Error processing AI request.",
+            actions=[]
+        )
 
 @app.post("/analyze", response_model=schemas.AnalysisResult)
 def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
@@ -543,6 +642,102 @@ def test_notification(db: Session = Depends(get_db), _: models.User = Depends(au
     if not settings:
         raise HTTPException(status_code=404, detail="Settings not found")
     return notifications.test_notification(settings)
+
+# --- SOAR Actions ---
+@app.post("/actions/block-ip", response_model=schemas.ActionResponse)
+async def block_ip(action: schemas.ActionRequest, db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    # Simulate IP Blocking
+    print(f"ACTION: Blocking IP {action.target} by {user.name}")
+    
+    # Log the action
+    log = models.Log(
+        id=str(uuid.uuid4()),
+        timestamp=datetime.now().isoformat(),
+        user=user.name,
+        activity_type="SOAR_ACTION",
+        risk_level="INFO",
+        description=f"Blocked IP Address: {action.target}",
+        details=f"Reason: {action.reason or 'Manual Action'}",
+        ip_address=action.target,
+        location="Internal"
+    )
+    db.add(log)
+    db.commit()
+    
+    await sio.emit('new_log', schemas.Log.model_validate(log).model_dump(by_alias=True))
+    
+    return {
+        "success": True,
+        "message": f"IP {action.target} has been successfully blocked.",
+        "action_id": log.id
+    }
+
+@app.post("/actions/isolate-host", response_model=schemas.ActionResponse)
+async def isolate_host(action: schemas.ActionRequest, db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    # Simulate Host Isolation
+    print(f"ACTION: Isolating Host {action.target} by {user.name}")
+    
+    log = models.Log(
+        id=str(uuid.uuid4()),
+        timestamp=datetime.now().isoformat(),
+        user=user.name,
+        activity_type="SOAR_ACTION",
+        risk_level="HIGH",
+        description=f"Isolated Host: {action.target}",
+        details=f"Reason: {action.reason or 'Manual Action'}",
+        location="Internal"
+    )
+    db.add(log)
+    db.commit()
+    
+    await sio.emit('new_log', schemas.Log.model_validate(log).model_dump(by_alias=True))
+    
+    return {
+        "success": True,
+        "message": f"Host {action.target} has been isolated from the network.",
+        "action_id": log.id
+    }
+
+@app.post("/actions/reset-password", response_model=schemas.ActionResponse)
+async def reset_password(action: schemas.ActionRequest, db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    # In a real app, this would reset the user's password.
+    # For now, we simulate the action.
+    target_user = db.query(models.User).filter(models.User.name == action.target).first()
+    if not target_user:
+         # Try by ID
+         target_user = db.query(models.User).filter(models.User.id == action.target).first()
+    
+    if target_user:
+        # Reset to default 'password123' or generate random
+        new_pass = "TemporaryPass123!"
+        target_user.hashed_password = auth.get_password_hash(new_pass)
+        db.commit()
+        msg = f"Password for {target_user.name} reset to {new_pass}"
+    else:
+        msg = f"User {action.target} not found, but action logged."
+
+    print(f"ACTION: Reset Password for {action.target} by {user.name}")
+    
+    log = models.Log(
+        id=str(uuid.uuid4()),
+        timestamp=datetime.now().isoformat(),
+        user=user.name,
+        activity_type="SOAR_ACTION",
+        risk_level="MEDIUM",
+        description=f"Reset Password for User: {action.target}",
+        details=f"Reason: {action.reason or 'Manual Action'}",
+        location="Internal"
+    )
+    db.add(log)
+    db.commit()
+    
+    await sio.emit('new_log', schemas.Log.model_validate(log).model_dump(by_alias=True))
+    
+    return {
+        "success": True,
+        "message": msg,
+        "action_id": log.id
+    }
 
 # Wrap FastAPI with Socket.IO
 app = socketio.ASGIApp(sio, other_asgi_app=app)

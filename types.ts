@@ -108,3 +108,17 @@ export interface PredictionResult {
     currentActivity: string;
     predictions: PredictionItem[];
 }
+
+export interface ActionCard {
+    type: 'BLOCK_IP' | 'ISOLATE_HOST' | 'RESET_PASSWORD';
+    label: string;
+    target: string;
+    reason: string;
+    status?: 'pending' | 'executed' | 'failed';
+}
+
+export interface ChatMessage {
+    role: 'user' | 'ai';
+    text: string;
+    actions?: ActionCard[];
+}

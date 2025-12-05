@@ -228,11 +228,19 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
                                 <span>Current: {prediction.currentActivity}</span>
                             </div>
                             {prediction.predictions.map((p, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-300">{p.activity}</span>
-                                    <span className={`font-mono ${p.probability > 0.8 ? 'text-red-400' : 'text-slate-400'}`}>
-                                        {(p.probability * 100).toFixed(0)}%
-                                    </span>
+                                <div key={idx} className="flex flex-col text-sm border-b border-slate-800 pb-2 last:border-0">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-300">{p.activity}</span>
+                                        <span className={`font-mono ${p.probability > 0.8 ? 'text-red-400' : 'text-slate-400'}`}>
+                                            {(p.probability * 100).toFixed(0)}%
+                                        </span>
+                                    </div>
+                                    {/* Show Reason if available (from AI) */}
+                                    {(p as any).reason && (
+                                        <span className="text-[10px] text-slate-500 mt-0.5 italic">
+                                            "{(p as any).reason}"
+                                        </span>
+                                    )}
                                 </div>
                             ))}
                         </div>
