@@ -30,4 +30,9 @@ export const getSimulationProfiles = () => API.get('/simulation/profiles');
 export const createSimulationProfile = (profile: any) => API.post('/simulation/profiles', profile);
 export const deleteSimulationProfile = (id: string) => API.delete(`/simulation/profiles/${id}`);
 
+// Agent Management
+export const getAgentStatus = () => API.get('/agent/status');
+export const startAgent = () => API.post('/agent/start');
+export const stopAgent = () => API.post('/agent/stop');
+
 export default API;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle, Plus, Trash2, Mail, MessageSquare, Server } from 'lucide-react';
-import API from '../services/api';
+import { Shield, Lock, Eye, Bell, Save, AlertTriangle, X, CheckCircle, Plus, Trash2, Mail, MessageSquare, Server, Terminal, Play, Square } from 'lucide-react';
+import API, { getAgentStatus, startAgent, stopAgent } from '../services/api';
 
 const Settings: React.FC = () => {
     const [settings, setSettings] = useState({
@@ -31,6 +31,10 @@ const Settings: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'IDLE' | 'SAVING' | 'SAVED'>('IDLE');
     const [testResult, setTestResult] = useState<string | null>(null);
+    
+    // Agent State
+    const [agentStatus, setAgentStatus] = useState<{is_running: boolean, pid: number | null}>({ is_running: false, pid: null });
+    const [agentLoading, setAgentLoading] = useState(false);
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -45,7 +49,45 @@ const Settings: React.FC = () => {
             }
         };
         fetchSettings();
+        checkAgentStatus();
+        
+        // Poll agent status
+        const interval = setInterval(checkAgentStatus, 5000);
+        return () => clearInterval(interval);
     }, []);
+
+    const checkAgentStatus = async () => {
+        try {
+            const res = await getAgentStatus();
+            setAgentStatus(res.data);
+        } catch (e) {
+            console.error("Failed to check agent status", e);
+        }
+    };
+
+    const handleStartAgent = async () => {
+        setAgentLoading(true);
+        try {
+            await startAgent();
+            await checkAgentStatus();
+        } catch (e) {
+            console.error("Failed to start agent", e);
+        } finally {
+            setAgentLoading(false);
+        }
+    };
+
+    const handleStopAgent = async () => {
+        setAgentLoading(true);
+        try {
+            await stopAgent();
+            await checkAgentStatus();
+        } catch (e) {
+            console.error("Failed to stop agent", e);
+        } finally {
+            setAgentLoading(false);
+        }
+    };
 
     const toggle = (key: keyof typeof settings) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -217,6 +259,58 @@ const Settings: React.FC = () => {
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.captureScreenshots ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Agent Control Panel */}
+                <div className="glass-panel p-6 rounded-xl border-t-4 border-t-emerald-500 md:col-span-2">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-slate-900 rounded border border-slate-800 text-emerald-400">
+                                <Terminal size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-white">Monitoring Agent</h3>
+                                <p className="text-slate-400 text-xs">Manage local data collection agent</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${agentStatus.is_running ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                <span className={`w-2 h-2 rounded-full ${agentStatus.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+                                {agentStatus.is_running ? `Running (PID: ${agentStatus.pid})` : 'Stopped'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-900/40 p-4 rounded-lg border border-slate-800 flex items-center justify-between">
+                        <div>
+                            <p className="text-slate-200 font-medium">Agent Status Control</p>
+                            <p className="text-slate-500 text-xs mt-1">
+                                The agent captures keystrokes (encrypted) and system metrics. 
+                                <br/>Ensure "Input Monitoring" permission is granted on macOS.
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            {!agentStatus.is_running ? (
+                                <button 
+                                    onClick={handleStartAgent}
+                                    disabled={agentLoading}
+                                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-all shadow-lg shadow-emerald-900/20"
+                                >
+                                    <Play size={16} fill="currentColor" />
+                                    {agentLoading ? "Starting..." : "Start Agent"}
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={handleStopAgent}
+                                    disabled={agentLoading}
+                                    className="flex items-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-all shadow-lg shadow-red-900/20"
+                                >
+                                    <Square size={16} fill="currentColor" />
+                                    {agentLoading ? "Stopping..." : "Stop Agent"}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

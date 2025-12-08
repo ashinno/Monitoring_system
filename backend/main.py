@@ -14,15 +14,10 @@ import json
 from datetime import datetime, timedelta
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications
+import agent_manager
 
-
-
-
-
-from database import engine
-
-# Create tables
-models.Base.metadata.create_all(bind=engine)
+# --- DB Setup ---
+models.Base.metadata.create_all(bind=database.engine)
 
 import base64
 
@@ -406,6 +401,17 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     if settings and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
         notifications.send_alert(db_log, settings)
     
+    # --- Real-time Heatmap ---
+    if log_data.get('activity_type') == 'KEYLOG' and log_data.get('activity_summary'):
+        try:
+            # Parse the summary JSON (counts)
+            import json
+            counts = json.loads(log_data['activity_summary'])
+            # Emit dedicated event
+            await sio.emit('key_heatmap_update', counts)
+        except Exception as e:
+            print(f"Failed to emit heatmap: {e}")
+
     # --- Prediction Integration ---
     try:
         current_activity = log_data.get('activity_type')
@@ -774,6 +780,19 @@ def test_notification(db: Session = Depends(get_db), _: models.User = Depends(au
     if not settings:
         raise HTTPException(status_code=404, detail="Settings not found")
     return notifications.test_notification(settings)
+
+# --- Agent Management Routes ---
+@app.get("/agent/status")
+def get_agent_status(_: models.User = Depends(auth.get_current_user)):
+    return agent_manager.agent_manager.get_status()
+
+@app.post("/agent/start")
+def start_agent(_: models.User = Depends(auth.get_current_user)):
+    return agent_manager.agent_manager.start_agent()
+
+@app.post("/agent/stop")
+def stop_agent(_: models.User = Depends(auth.get_current_user)):
+    return agent_manager.agent_manager.stop_agent()
 
 # --- SOAR Actions ---
 @app.post("/actions/block-ip", response_model=schemas.ActionResponse)

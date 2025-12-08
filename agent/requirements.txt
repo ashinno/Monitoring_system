@@ -1,0 +1,4 @@
+requests
+pynput
+cryptography
+psutil

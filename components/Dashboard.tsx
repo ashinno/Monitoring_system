@@ -10,6 +10,7 @@ import NetworkAnalysis from './NetworkAnalysis';
 import NetworkGraph from './NetworkGraph';
 import TrafficSimulator from './TrafficSimulator';
 import SystemMetrics from './SystemMetrics';
+import KeymapHeatmap from './KeymapHeatmap';
 import { io } from 'socket.io-client';
 
 interface DashboardProps {
@@ -349,6 +350,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
             <NetworkGraph logs={logs} />
             <TrafficSimulator />
             <NetworkAnalysis />
+            <KeymapHeatmap />
         </div>
     );
 };
