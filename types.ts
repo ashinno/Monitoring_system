@@ -45,7 +45,7 @@ export interface AnalysisResult {
     flaggedLogs: string[];
 }
 
-export type ViewState = 'DASHBOARD' | 'LIVE_MONITOR' | 'AI_ANALYST' | 'SETTINGS' | 'USERS' | 'AUTOMATION';
+export type ViewState = 'DASHBOARD' | 'LIVE_MONITOR' | 'AI_ANALYST' | 'SETTINGS' | 'USERS' | 'AUTOMATION' | 'KEYLOGGER';
 
 export interface StatCardProps {
     title: string;

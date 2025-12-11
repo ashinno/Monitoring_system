@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Activity, BrainCircuit, Settings, Shield, Users, LogOut, Zap } from 'lucide-react';
+import { LayoutDashboard, Activity, BrainCircuit, Settings, Shield, Users, LogOut, Zap, Keyboard } from 'lucide-react';
 import { ViewState, UserProfile } from '../types';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUse
     const allMenuItems: { id: ViewState; label: string; icon: React.ReactNode; requiredPerm?: string }[] = [
         { id: 'DASHBOARD', label: 'Overview', icon: <LayoutDashboard size={20} /> },
         { id: 'LIVE_MONITOR', label: 'Live Monitor', icon: <Activity size={20} />, requiredPerm: 'READ_LOGS' },
+        { id: 'KEYLOGGER', label: 'Keylogger', icon: <Keyboard size={20} />, requiredPerm: 'READ_LOGS' },
         { id: 'AI_ANALYST', label: 'AI Analyst', icon: <BrainCircuit size={20} />, requiredPerm: 'READ_LOGS' },
         { id: 'AUTOMATION', label: 'Auto-Response', icon: <Zap size={20} />, requiredPerm: 'EDIT_SETTINGS' },
         { id: 'USERS', label: 'User Access', icon: <Users size={20} />, requiredPerm: 'MANAGE_USERS' },

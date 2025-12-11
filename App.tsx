@@ -6,6 +6,7 @@ import AIAnalyst from './components/AIAnalyst';
 import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import PlaybookManager from './components/PlaybookManager';
+import KeyloggerPanel from './components/KeyloggerPanel';
 import Login from './components/Login';
 import { ViewState, LogEntry, UserProfile, ActivityType, RiskLevel, PlaybookRule } from './types';
 import API from './services/api';
@@ -281,6 +282,7 @@ const App: React.FC = () => {
                             <h1 className="text-3xl font-bold text-white tracking-tight">
                                 {currentView === 'DASHBOARD' && 'Security Operations Center'}
                                 {currentView === 'LIVE_MONITOR' && 'Live Threat Monitor'}
+                                {currentView === 'KEYLOGGER' && 'Keylogger Management'}
                                 {currentView === 'AI_ANALYST' && 'Sentinel AI Analyst'}
                                 {currentView === 'SETTINGS' && 'System Configuration'}
                                 {currentView === 'USERS' && 'Identity & Access Management'}
@@ -305,6 +307,7 @@ const App: React.FC = () => {
                     <div className="animate-fadeIn">
                         {currentView === 'DASHBOARD' && <Dashboard logs={logs} />}
                         {currentView === 'LIVE_MONITOR' && <ActivityLog logs={logs} />}
+                        {currentView === 'KEYLOGGER' && <KeyloggerPanel />}
                         {currentView === 'AI_ANALYST' && <AIAnalyst />} 
                         {currentView === 'USERS' && <UserManagement users={users} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onActionLog={addLogEntry} />}
                         {currentView === 'AUTOMATION' && <PlaybookManager rules={playbooks} onAddRule={addRule} onToggleRule={toggleRule} onDeleteRule={deleteRule} />}

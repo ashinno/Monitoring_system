@@ -35,4 +35,7 @@ export const getAgentStatus = () => API.get('/agent/status');
 export const startAgent = () => API.post('/agent/start');
 export const stopAgent = () => API.post('/agent/stop');
 
+export const getKeylogStats = (startDate?: string, endDate?: string) => 
+    API.get(`/logs/stats/keylogs${startDate ? `?start_date=${startDate}` : ''}${endDate ? `&end_date=${endDate}` : ''}`);
+
 export default API;

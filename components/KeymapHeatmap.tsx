@@ -69,14 +69,14 @@ const KeymapHeatmap: React.FC = () => {
 
     const getKeyWidth = (key: string) => {
         switch (key) {
-            case 'BACKSPACE': return 'w-24';
-            case 'TAB': return 'w-20';
-            case 'CAPS': return 'w-24';
-            case 'ENTER': return 'w-28';
-            case 'SHIFT': return 'w-32';
-            case 'SPACE': return 'w-96';
-            case 'CTRL': return 'w-16';
-            default: return 'w-14';
+            case 'BACKSPACE': return 'w-16';
+            case 'TAB': return 'w-14';
+            case 'CAPS': return 'w-16';
+            case 'ENTER': return 'w-20';
+            case 'SHIFT': return 'w-24';
+            case 'SPACE': return 'w-64';
+            case 'CTRL': return 'w-12';
+            default: return 'w-10';
         }
     };
 
@@ -112,30 +112,32 @@ const KeymapHeatmap: React.FC = () => {
             </div>
 
             {/* Keyboard Heatmap */}
-            <div className="glass-panel p-8 rounded-xl border border-slate-800 flex flex-col items-center justify-center bg-slate-950">
+            <div className="glass-panel p-8 rounded-xl border border-slate-800 flex flex-col items-center justify-center bg-slate-950 overflow-hidden">
                 <h3 className="text-slate-400 text-sm font-mono uppercase tracking-widest mb-8">Full Spectrum Heatmap</h3>
                 
-                <div className="flex flex-col gap-2">
-                    {KEYBOARD_LAYOUT.map((row, rowIndex) => (
-                        <div key={rowIndex} className="flex gap-2 justify-center">
-                            {row.map((key, keyIndex) => (
-                                <div
-                                    key={`${rowIndex}-${keyIndex}-${key}`}
-                                    className={`
-                                        h-14 flex items-center justify-center rounded-lg border 
-                                        text-xs font-bold transition-all duration-300
-                                        ${getKeyWidth(key)}
-                                        ${getKeyColor(key)}
-                                    `}
-                                >
-                                    {key}
-                                </div>
-                            ))}
-                        </div>
-                    ))}
+                <div className="w-full overflow-x-auto pb-4">
+                    <div className="flex flex-col gap-1 min-w-[700px] items-center">
+                        {KEYBOARD_LAYOUT.map((row, rowIndex) => (
+                            <div key={rowIndex} className="flex gap-1 justify-center w-full">
+                                {row.map((key, keyIndex) => (
+                                    <div
+                                        key={`${rowIndex}-${keyIndex}-${key}`}
+                                        className={`
+                                            h-10 flex items-center justify-center rounded border flex-shrink-0
+                                            text-[10px] font-bold transition-all duration-300
+                                            ${getKeyWidth(key)}
+                                            ${getKeyColor(key)}
+                                        `}
+                                    >
+                                        {key}
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-6 mt-8 text-xs text-slate-500 font-mono">
+                <div className="flex items-center gap-6 mt-4 text-xs text-slate-500 font-mono flex-wrap justify-center">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-slate-800 border border-slate-700"></div>
                         <span>IDLE</span>
