@@ -380,12 +380,23 @@ def get_keylog_stats(
                     # Estimate keystrokes from sum of counts
                     count_sum = sum(data.values())
                     total_keystrokes += count_sum
-                    # No duration or app data in old format
+                    # No duration or app data in old format, but count as session
+                    app = "Unknown"
+                    app_usage[app] = app_usage.get(app, 0) + 1
             except:
                 pass
                 
     # Sort apps by frequency (sessions)
-    top_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)[:5]
+    # Filter out 'Unknown' if there are other apps, or move it to bottom?
+    # Better to exclude it from "Top Apps" to focus on identified activity.
+    filtered_apps = {k: v for k, v in app_usage.items() if k != "Unknown"}
+    
+    # If we have nothing but unknown, we might show it, but usually user wants to see real apps.
+    if filtered_apps:
+        top_apps = sorted(filtered_apps.items(), key=lambda x: x[1], reverse=True)[:5]
+    else:
+        # Fallback if only unknown exists
+        top_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)[:5]
     
     return {
         "total_sessions": total_sessions,
