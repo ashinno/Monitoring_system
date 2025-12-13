@@ -347,7 +347,7 @@ def get_keylog_stats(
     start_date: str = None, 
     end_date: str = None, 
     db: Session = Depends(get_db), 
-    _: models.User = Depends(auth.get_current_user)
+    user: models.User = Depends(auth.get_current_user)
 ):
     query = db.query(models.Log).filter(models.Log.activity_type == "KEYLOG")
     if start_date:

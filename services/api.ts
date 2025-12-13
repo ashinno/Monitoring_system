@@ -12,6 +12,18 @@ API.interceptors.request.use((config) => {
     return config;
 });
 
+API.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            console.warn("Unauthorized access. Redirecting to login.");
+            localStorage.removeItem('token');
+            window.location.href = '/'; // Redirect to login/home
+        }
+        return Promise.reject(error);
+    }
+);
+
 export const getNetworkTraffic = () => API.get('/traffic');
 export const getNetworkAnalysis = () => API.get('/traffic/analyze');
 export const getSystemMetrics = () => API.get('/api/system-metrics');

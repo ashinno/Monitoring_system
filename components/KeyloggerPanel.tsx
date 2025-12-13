@@ -22,8 +22,13 @@ const KeyloggerPanel: React.FC = () => {
         try {
             const response = await getKeylogStats();
             setStats(response.data);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to fetch keylog stats", error);
+            // Optionally set error state to show in UI
+            if (error.response?.status === 401) {
+                // Handled by interceptor, but we can stop loading
+                setLoading(false);
+            }
         } finally {
             setLoading(false);
         }
