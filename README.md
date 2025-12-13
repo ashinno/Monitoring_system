@@ -51,10 +51,21 @@ Configuration panel for managing monitoring rules, content filters, and screensh
   2. **Generative AI**: Google Gemini analyzes text-based logs to provide natural language summaries and strategic recommendations.
 - **Output**: Generates detailed text reports and downloadable threat assessments.
 
-### Automated Playbooks
-- **Purpose**: To reduce response time for critical incidents.
+### Automated Playbooks (SOAR)
+- **Purpose**: To reduce response time for critical incidents through Security Orchestration, Automation, and Response.
 - **Configuration**: Users define rules (e.g., `IF RiskLevel == CRITICAL THEN LockUser`).
-- **Execution**: The system continuously checks new logs against active playbooks and executes defined actions automatically.
+- **Execution**: The robust Python-based backend engine continuously evaluates new logs against active playbooks in the background.
+- **Features**:
+    - **Platform Agnostic**: Actions like "Lock User" are implemented at the application database level, ensuring compatibility across Windows, macOS, and Linux.
+    - **Adaptive Resource Management**: Uses asynchronous background tasks to ensure log ingestion remains high-performance even under heavy automation load.
+    - **Graceful Degradation**: Individual playbook failures are logged but do not crash the monitoring pipeline.
+
+### SOAR System Requirements & Limitations
+- **Requirements**: Python 3.8+ for backend execution.
+- **Limitations**:
+    - "Lock User" and "Quarantine" actions currently affect application access only (Database status), not OS-level user accounts.
+    - External notifications (Email/SMS) require valid SMTP/Twilio configuration in Settings.
+    - Automated actions are processed asynchronously; there may be a slight delay (milliseconds to seconds) between detection and action depending on system load.
 
 ### User & Content Monitoring
 - **Activity Logging**: Tracks user actions with risk levels (INFO, WARNING, CRITICAL).

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ import httpx
 import json
 from datetime import datetime, timedelta
 
-import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications
+import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications, soar_engine
 import agent_manager
 
 # --- DB Setup ---
@@ -406,7 +406,7 @@ def get_keylog_stats(
     }
 
 @app.post("/logs", response_model=schemas.Log)
-async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
+async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # Save to DB
     log_data = log.model_dump()
     
@@ -459,6 +459,9 @@ async def create_log(log: schemas.LogCreate, db: Session = Depends(get_db)):
     # schemas.Log.model_validate(db_log).model_dump(by_alias=True) will give camelCase
     log_response = schemas.Log.model_validate(db_log)
     await sio.emit('new_log', log_response.model_dump(by_alias=True))
+
+    # --- SOAR Automation (Background) ---
+    background_tasks.add_task(soar_engine.engine.run_automation, db_log.id)
 
     # Notifications
     if settings and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
@@ -534,12 +537,6 @@ def train_anomaly_model(db: Session = Depends(get_db), _: models.User = Depends(
 @app.get("/playbooks", response_model=List[schemas.Playbook])
 def read_playbooks(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     playbooks = db.query(models.Playbook).all()
-    # Map flat DB to nested Schema
-    # The Pydantic model expects nested trigger/action.
-    # We can do this manually or let Pydantic from_attributes try?
-    # We added @property to models.py? No I decided to do it in schema or manual.
-    # I didn't add properties to models.py. So I must construct them.
-    
     results = []
     for p in playbooks:
         results.append({
@@ -557,6 +554,71 @@ def read_playbooks(db: Session = Depends(get_db), _: models.User = Depends(auth.
             }
         })
     return results
+
+
+@app.post("/playbooks", response_model=schemas.Playbook)
+def create_playbook(playbook: schemas.PlaybookCreate, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    db_playbook = models.Playbook(
+        id=playbook.id,
+        name=playbook.name,
+        is_active=playbook.is_active,
+        trigger_field=playbook.trigger.field,
+        trigger_operator=playbook.trigger.operator,
+        trigger_value=playbook.trigger.value,
+        action_type=playbook.action.type,
+        action_target=playbook.action.target
+    )
+    db.add(db_playbook)
+    db.commit()
+    db.refresh(db_playbook)
+    return {
+        "id": db_playbook.id,
+        "name": db_playbook.name,
+        "is_active": db_playbook.is_active,
+        "trigger": {
+            "field": db_playbook.trigger_field,
+            "operator": db_playbook.trigger_operator,
+            "value": db_playbook.trigger_value
+        },
+        "action": {
+            "type": db_playbook.action_type,
+            "target": db_playbook.action_target
+        }
+    }
+
+
+@app.put("/playbooks/{playbook_id}/toggle", response_model=schemas.Playbook)
+def toggle_playbook(playbook_id: str, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    db_playbook = db.query(models.Playbook).filter(models.Playbook.id == playbook_id).first()
+    if not db_playbook:
+        raise HTTPException(status_code=404, detail="Playbook not found")
+    db_playbook.is_active = not db_playbook.is_active
+    db.commit()
+    db.refresh(db_playbook)
+    return {
+        "id": db_playbook.id,
+        "name": db_playbook.name,
+        "is_active": db_playbook.is_active,
+        "trigger": {
+            "field": db_playbook.trigger_field,
+            "operator": db_playbook.trigger_operator,
+            "value": db_playbook.trigger_value
+        },
+        "action": {
+            "type": db_playbook.action_type,
+            "target": db_playbook.action_target
+        }
+    }
+
+
+@app.delete("/playbooks/{playbook_id}")
+def delete_playbook(playbook_id: str, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    db_playbook = db.query(models.Playbook).filter(models.Playbook.id == playbook_id).first()
+    if not db_playbook:
+        raise HTTPException(status_code=404, detail="Playbook not found")
+    db.delete(db_playbook)
+    db.commit()
+    return {"ok": True}
 
 # Settings Routes
 @app.get("/settings", response_model=schemas.Settings)

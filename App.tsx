@@ -237,24 +237,34 @@ const App: React.FC = () => {
         }
     };
 
-    // Playbook CRUD (Mock for now as backend Playbook CRUD is basic read-only in my main.py implementation? 
-    // Wait, I only implemented GET /playbooks. I should have added POST/PUT/DELETE for full functionality.
-    // But user only asked for "models.py : ... Playbook" and "Routes: ... /users (CRUD), /logs ...". 
-    // It didn't explicitly say /playbooks (CRUD).
-    // I will just fetch them.
-    const addRule = (rule: PlaybookRule) => {
-        // Not implemented on backend in this turn.
-        console.warn("Playbook creation not implemented on backend yet.", rule);
+    const addRule = async (rule: PlaybookRule) => {
+        try {
+            await API.post('/playbooks', rule);
+            const res = await API.get('/playbooks');
+            setPlaybooks(res.data);
+        } catch (e) {
+            console.error("Failed to create playbook", e);
+        }
     };
 
-    const toggleRule = (id: string) => {
-         // Not implemented
-         console.warn("Playbook toggle not implemented", id);
+    const toggleRule = async (id: string) => {
+        try {
+            await API.put(`/playbooks/${id}/toggle`);
+            const res = await API.get('/playbooks');
+            setPlaybooks(res.data);
+        } catch (e) {
+            console.error("Failed to toggle playbook", e);
+        }
     };
 
-    const deleteRule = (id: string) => {
-         // Not implemented
-         console.warn("Playbook deletion not implemented", id);
+    const deleteRule = async (id: string) => {
+        try {
+            await API.delete(`/playbooks/${id}`);
+            const res = await API.get('/playbooks');
+            setPlaybooks(res.data);
+        } catch (e) {
+            console.error("Failed to delete playbook", e);
+        }
     };
 
     if (isLoadingAuth) {
