@@ -51,6 +51,7 @@ class Settings(Base):
     block_social_media = Column(Boolean, default=False)
     enforce_safe_search = Column(Boolean, default=True)
     screen_time_limit = Column(Boolean, default=True)
+    screen_time_duration_minutes = Column(Integer, default=120)
     alert_on_keywords = Column(Boolean, default=True)
     capture_screenshots = Column(Boolean, default=False)
     keywords = Column(JSON, default=["password", "confidential", "secret", "key"])

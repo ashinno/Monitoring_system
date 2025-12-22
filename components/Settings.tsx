@@ -8,6 +8,7 @@ const Settings: React.FC = () => {
         blockSocialMedia: false,
         enforceSafeSearch: true,
         screenTimeLimit: true,
+        screenTimeDurationMinutes: 120,
         alertOnKeywords: true,
         captureScreenshots: false,
         keywords: [] as string[],
@@ -238,7 +239,20 @@ const Settings: React.FC = () => {
                         <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
                             <div>
                                 <p className="text-slate-200 font-medium">Screen Time Limits</p>
-                                <p className="text-slate-500 text-xs">Auto-lock after designated hours</p>
+                                <p className="text-slate-500 text-xs">Auto-lock after designated minutes</p>
+                                {settings.screenTimeLimit && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            step="1"
+                                            value={settings.screenTimeDurationMinutes || 120}
+                                            onChange={(e) => setSettings(prev => ({ ...prev, screenTimeDurationMinutes: parseInt(e.target.value) }))}
+                                            className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:border-purple-500 outline-none"
+                                        />
+                                        <span className="text-slate-500 text-xs">minutes of inactivity</span>
+                                    </div>
+                                )}
                             </div>
                             <button 
                                 onClick={() => toggle('screenTimeLimit')}

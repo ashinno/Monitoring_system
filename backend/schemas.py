@@ -97,6 +97,7 @@ class SettingsBase(BaseSchema):
     block_social_media: bool
     enforce_safe_search: bool
     screen_time_limit: bool
+    screen_time_duration_minutes: int = 120
     alert_on_keywords: bool
     capture_screenshots: bool
     keywords: List[str]
