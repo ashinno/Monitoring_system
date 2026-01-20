@@ -12,7 +12,15 @@ export enum ActivityType {
     APP = 'APP',
     SYSTEM = 'SYSTEM',
     NETWORK = 'NETWORK',
-    ADMIN = 'ADMIN'
+    ADMIN = 'ADMIN',
+    KEYLOG = 'KEYLOG',
+    SYSTEM_METRIC = 'SYSTEM_METRIC',
+    SCREENSHOT = 'SCREENSHOT',
+    CLIPBOARD = 'CLIPBOARD',
+    USB = 'USB',
+    CAMERA = 'CAMERA',
+    SYSTEM_ACTION = 'SYSTEM_ACTION',
+    SOAR_ACTION = 'SOAR_ACTION'
 }
 
 export interface LogEntry {

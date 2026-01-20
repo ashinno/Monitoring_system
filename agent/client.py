@@ -5,6 +5,7 @@ import platform
 import socket
 import subprocess
 import os
+import json
 from datetime import datetime
 from config import Config
 from encryption import Encryptor
@@ -15,10 +16,13 @@ except Exception:
     _KeyLogger = None
 
 try:
-    from monitor import SystemMonitor as _SystemMonitor, NetworkMonitor as _NetworkMonitor
+    from monitor import SystemMonitor as _SystemMonitor, NetworkMonitor as _NetworkMonitor, ClipboardMonitor as _ClipboardMonitor, UsbMonitor as _UsbMonitor, CameraMonitor as _CameraMonitor
 except Exception:
     _SystemMonitor = None
     _NetworkMonitor = None
+    _ClipboardMonitor = None
+    _UsbMonitor = None
+    _CameraMonitor = None
 
 
 class _NullKeyLogger:
@@ -56,6 +60,18 @@ class _NullNetworkMonitor:
     def get_and_reset_stats(self):
         return []
 
+class _NullClipboardMonitor:
+    def poll(self):
+        return None
+
+class _NullUsbMonitor:
+    def poll(self):
+        return None
+
+class _NullCameraMonitor:
+    def poll(self):
+        return None
+
 class SentinelAgent:
     def __init__(self):
         self.base_url = Config.BASE_URL
@@ -64,6 +80,9 @@ class SentinelAgent:
         self.keylogger = _KeyLogger() if _KeyLogger else _NullKeyLogger()
         self.monitor = _SystemMonitor() if _SystemMonitor else _NullSystemMonitor()
         self.network_monitor = _NetworkMonitor() if _NetworkMonitor else _NullNetworkMonitor()
+        self.clipboard_monitor = _ClipboardMonitor() if _ClipboardMonitor else _NullClipboardMonitor()
+        self.usb_monitor = _UsbMonitor() if _UsbMonitor else _NullUsbMonitor()
+        self.camera_monitor = _CameraMonitor() if _CameraMonitor else _NullCameraMonitor()
         self.host_name = socket.gethostname()
         self.ip_address = self._get_ip()
         self.settings = {}
@@ -114,6 +133,13 @@ class SentinelAgent:
                 print(f"Failed to fetch settings: {response.text}")
         except Exception as e:
             print(f"Error fetching settings: {e}")
+
+    def _get_setting(self, camel_key, snake_key, default=False):
+        if camel_key in self.settings:
+            return bool(self.settings.get(camel_key))
+        if snake_key in self.settings:
+            return bool(self.settings.get(snake_key))
+        return default
 
     def send_log(self, activity_type, description, details, risk_level="INFO"):
         if not self.token:
@@ -281,6 +307,46 @@ class SentinelAgent:
                     details=metrics,
                     risk_level="INFO"
                 )
+
+                if self._get_setting("monitorClipboard", "monitor_clipboard", False):
+                    clipboard_event = self.clipboard_monitor.poll()
+                    if clipboard_event:
+                        self.send_log(
+                            activity_type="CLIPBOARD",
+                            description=f"Clipboard updated ({clipboard_event.get('length', 0)} chars)",
+                            details=json.dumps(clipboard_event),
+                            risk_level="INFO"
+                        )
+
+                if self._get_setting("monitorUsb", "monitor_usb", False):
+                    usb_event = self.usb_monitor.poll()
+                    if usb_event:
+                        description = "USB device change detected"
+                        if usb_event.get("added"):
+                            description = "USB device attached"
+                        elif usb_event.get("removed"):
+                            description = "USB device removed"
+                        self.send_log(
+                            activity_type="USB",
+                            description=description,
+                            details=json.dumps(usb_event),
+                            risk_level="INFO"
+                        )
+
+                if self._get_setting("monitorCamera", "monitor_camera", False):
+                    camera_event = self.camera_monitor.poll()
+                    if camera_event:
+                        description = "Camera device change detected"
+                        if camera_event.get("added"):
+                            description = "Camera device attached"
+                        elif camera_event.get("removed"):
+                            description = "Camera device removed"
+                        self.send_log(
+                            activity_type="CAMERA",
+                            description=description,
+                            details=json.dumps(camera_event),
+                            risk_level="INFO"
+                        )
                 
                 # 3. Pathway 1: Federated Learning Update
                 # Every ~5 minutes (150 loops @ 2s)

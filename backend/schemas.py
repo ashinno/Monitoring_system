@@ -100,6 +100,9 @@ class SettingsBase(BaseSchema):
     screen_time_duration_minutes: int = 120
     alert_on_keywords: bool
     capture_screenshots: bool
+    monitor_clipboard: bool = False
+    monitor_usb: bool = False
+    monitor_camera: bool = False
     keywords: List[str]
     email_notifications: bool = False
     notification_email: Optional[str] = None
@@ -252,4 +255,3 @@ class ChatResponse(BaseSchema):
     role: str
     text: str
     actions: Optional[List[ActionCard]] = None
-

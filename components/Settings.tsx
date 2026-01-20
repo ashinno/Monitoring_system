@@ -11,6 +11,9 @@ const Settings: React.FC = () => {
         screenTimeDurationMinutes: 120,
         alertOnKeywords: true,
         captureScreenshots: false,
+        monitorClipboard: false,
+        monitorUsb: false,
+        monitorCamera: false,
         keywords: [] as string[],
         emailNotifications: false,
         notificationEmail: "",
@@ -272,6 +275,45 @@ const Settings: React.FC = () => {
                                 className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.captureScreenshots ? 'bg-purple-600' : 'bg-slate-700'}`}
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.captureScreenshots ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
+                            <div>
+                                <p className="text-slate-200 font-medium">Clipboard Monitoring</p>
+                                <p className="text-slate-500 text-xs">Track clipboard changes for data leak signals</p>
+                            </div>
+                            <button 
+                                onClick={() => toggle('monitorClipboard')}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.monitorClipboard ? 'bg-purple-600' : 'bg-slate-700'}`}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.monitorClipboard ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
+                            <div>
+                                <p className="text-slate-200 font-medium">USB Monitoring</p>
+                                <p className="text-slate-500 text-xs">Detect external device attach or removal</p>
+                            </div>
+                            <button 
+                                onClick={() => toggle('monitorUsb')}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.monitorUsb ? 'bg-purple-600' : 'bg-slate-700'}`}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.monitorUsb ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 bg-slate-900/40 rounded-lg">
+                            <div>
+                                <p className="text-slate-200 font-medium">Camera Monitoring</p>
+                                <p className="text-slate-500 text-xs">Track camera device availability changes</p>
+                            </div>
+                            <button 
+                                onClick={() => toggle('monitorCamera')}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${settings.monitorCamera ? 'bg-purple-600' : 'bg-slate-700'}`}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform duration-300 ${settings.monitorCamera ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
                     </div>

@@ -54,6 +54,9 @@ class Settings(Base):
     screen_time_duration_minutes = Column(Integer, default=120)
     alert_on_keywords = Column(Boolean, default=True)
     capture_screenshots = Column(Boolean, default=False)
+    monitor_clipboard = Column(Boolean, default=False)
+    monitor_usb = Column(Boolean, default=False)
+    monitor_camera = Column(Boolean, default=False)
     keywords = Column(JSON, default=["password", "confidential", "secret", "key"])
     
     # Notification Settings
@@ -116,4 +119,3 @@ class SimulationProfile(Base):
     packet_size_range = Column(JSON) # Store as list [min, max]
     latency = Column(Integer, default=0)
     attack_type = Column(String, nullable=True)
-
