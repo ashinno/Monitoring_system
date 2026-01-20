@@ -4,7 +4,6 @@ import uuid
 import platform
 import socket
 import subprocess
-import os
 import json
 from datetime import datetime
 from config import Config

@@ -98,6 +98,20 @@ Configuration panel for managing monitoring rules, content filters, and screensh
    ```
    The backend API will run on `http://localhost:8000`.
 
+### Agent Setup
+1. Navigate to the agent directory:
+   ```bash
+   cd agent
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Run the agent (requires admin privileges for some features):
+   ```bash
+   sudo python client.py
+   ```
+
 ### Frontend Setup
 1. Navigate to the project root (if not already there):
    ```bash

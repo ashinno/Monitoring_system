@@ -41,3 +41,6 @@ env/
 .claude
 thesis_chapters/
 screenshots/
+reports/
+test-results/
+*.pkl

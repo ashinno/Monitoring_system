@@ -36,15 +36,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-// Generate mock chart data (static for visual demo, but could be dynamic)
-const trafficData = Array.from({ length: 24 }, (_, i) => ({
-    time: `${i}:00`,
-    inbound: Math.floor(Math.random() * 100) + 20,
-    outbound: Math.floor(Math.random() * 80) + 10,
-}));
-
 const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
-    const [chartData, setChartData] = useState<any[]>(trafficData);
+    const [chartData, setChartData] = useState<any[]>([]);
     const [trafficLogs, setTrafficLogs] = useState<NetworkTraffic[]>([]);
     const [prediction, setPrediction] = useState<PredictionResult | null>(null);
 
@@ -118,19 +111,13 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
             outbound: grouped[key].outbound
         }));
 
-        // If not enough data, pad with previous mock-like logic or just show what we have
-        if (processed.length > 0) {
-            setChartData(processed);
-        } else {
-            // Fallback to mock if empty
-            setChartData(trafficData);
-        }
+        setChartData(processed);
     };
 
     // Dynamic Calculations
     const threatsBlocked = logs.filter(l => l.riskLevel === RiskLevel.HIGH || l.riskLevel === RiskLevel.CRITICAL).length;
     const activeUsers = new Set(logs.map(l => l.user)).size;
-    const aiAnomalies = Math.floor(threatsBlocked * 0.85); // Mocking that 85% of threats were detected by AI
+    const aiAnomalies = logs.filter(l => l.description.includes("[ML_DETECTED]")).length;
     
     // Risk Counts for Breakdown Card
     const totalLogs = logs.length || 1;
@@ -146,6 +133,13 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
         { name: 'Medium', value: riskCounts[RiskLevel.MEDIUM], color: '#eab308' },
         { name: 'High', value: riskCounts[RiskLevel.HIGH], color: '#f97316' },
         { name: 'Critical', value: riskCounts[RiskLevel.CRITICAL], color: '#ef4444' },
+    ];
+
+    const statCards: { title: string; val: string | number; icon: React.ReactNode; trend?: string }[] = [
+        { title: "Threats Detected", val: threatsBlocked, icon: <ShieldAlert className="text-red-400" /> },
+        { title: "Active Users", val: activeUsers, icon: <Users className="text-cyan-400" /> },
+        { title: "AI Anomalies", val: aiAnomalies, icon: <BrainCircuit className="text-purple-400" /> },
+        { title: "Low Risk Share", val: `${Math.round((riskCounts[RiskLevel.LOW] / totalLogs) * 100)}%`, icon: <Sparkles className="text-pink-400" /> },
     ];
 
     return (
@@ -168,20 +162,17 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
 
             {/* Stat Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-                {[
-                    { title: "Threats Detected", val: threatsBlocked, icon: <ShieldAlert className="text-red-400" />, trend: "+12%" },
-                    { title: "Active Users", val: activeUsers, icon: <Users className="text-cyan-400" />, trend: "stable" },
-                    { title: "AI Anomalies", val: aiAnomalies, icon: <BrainCircuit className="text-purple-400" />, trend: "98% acc." },
-                    { title: "False Positive Rate", val: "0.4%", icon: <Sparkles className="text-pink-400" />, trend: "-0.1%" },
-                ].map((stat, idx) => (
+                {statCards.map((stat, idx) => (
                     <div key={idx} className="glass-panel p-5 rounded-xl hover:bg-slate-800/50 transition-colors">
                         <div className="flex justify-between items-start mb-4">
                             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                                 {stat.icon}
                             </div>
-                            <span className={`text-xs font-mono ${stat.trend === 'stable' ? 'text-slate-400' : stat.trend.includes('-') ? 'text-green-400' : stat.trend.includes('acc') ? 'text-purple-400' : 'text-red-400'}`}>
-                                {stat.trend}
-                            </span>
+                            {stat.trend && (
+                                <span className={`text-xs font-mono ${stat.trend === 'stable' ? 'text-slate-400' : stat.trend.includes('-') ? 'text-green-400' : stat.trend.includes('acc') ? 'text-purple-400' : 'text-red-400'}`}>
+                                    {stat.trend}
+                                </span>
+                            )}
                         </div>
                         <h3 className="text-slate-400 text-sm font-medium">{stat.title}</h3>
                         <p className="text-2xl font-bold text-white font-mono mt-1">{stat.val}</p>

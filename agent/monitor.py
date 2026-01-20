@@ -8,7 +8,7 @@ import subprocess
 import json
 import hashlib
 try:
-    from scapy.all import sniff, IP, TCP, UDP
+    from scapy.all import sniff, IP
 except ImportError:
     print("Scapy not installed. Network monitoring disabled.")
 

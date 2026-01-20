@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 from typing import List
 from contextlib import asynccontextmanager
 import socketio
@@ -154,11 +155,27 @@ async def metrics_loop():
             print(f"Metrics save error: {e}")
         await asyncio.sleep(60) # Save every minute
 
+def ensure_settings_schema():
+    inspector = inspect(database.engine)
+    if "settings" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("settings")}
+    columns = {
+        "monitor_clipboard": "BOOLEAN DEFAULT 0",
+        "monitor_usb": "BOOLEAN DEFAULT 0",
+        "monitor_camera": "BOOLEAN DEFAULT 0"
+    }
+    with database.engine.begin() as conn:
+        for name, ddl in columns.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE settings ADD COLUMN {name} {ddl}"))
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI):
     db = database.SessionLocal()
     disable_background = os.getenv("SENTINEL_DISABLE_BACKGROUND_TASKS") == "1" or os.getenv("SENTINEL_TESTING") == "1"
     try:
+        ensure_settings_schema()
         if not db.query(models.User).first():
             print("Seeding database with default users...")
             # Admin
@@ -529,7 +546,7 @@ def receive_federated_update(weights: dict, _: models.User = Depends(auth.get_cu
     # Check if we should aggregate (e.g., if we have enough updates)
     # For demo, we might aggregate every time or just log it
     if len(ml_engine.federated_aggregator.local_updates) >= 1: # Simple trigger
-        new_global_model = ml_engine.federated_aggregator.aggregate()
+        ml_engine.federated_aggregator.aggregate()
         return {"status": "accepted", "global_model_updated": True}
         
     return {"status": "accepted", "global_model_updated": False}
