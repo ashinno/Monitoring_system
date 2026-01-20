@@ -8,16 +8,62 @@ import os
 from datetime import datetime
 from config import Config
 from encryption import Encryptor
-from logger_service import KeyLogger
-from monitor import SystemMonitor
+
+try:
+    from logger_service import KeyLogger as _KeyLogger
+except Exception:
+    _KeyLogger = None
+
+try:
+    from monitor import SystemMonitor as _SystemMonitor, NetworkMonitor as _NetworkMonitor
+except Exception:
+    _SystemMonitor = None
+    _NetworkMonitor = None
+
+
+class _NullKeyLogger:
+    def __init__(self):
+        self.last_activity_time = datetime.now()
+
+    def start(self):
+        return None
+
+    def stop(self):
+        return None
+
+    def flush(self):
+        return None, {}
+
+
+class _NullSystemMonitor:
+    def get_metrics(self):
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "cpu_percent": 0.0,
+            "memory_percent": 0.0,
+            "memory_used_mb": 0,
+            "disk_percent": 0.0,
+        }
+
+
+class _NullNetworkMonitor:
+    def start(self):
+        return None
+
+    def stop(self):
+        return None
+
+    def get_and_reset_stats(self):
+        return []
 
 class SentinelAgent:
     def __init__(self):
         self.base_url = Config.BASE_URL
         self.token = None
         self.encryptor = Encryptor()
-        self.keylogger = KeyLogger()
-        self.monitor = SystemMonitor()
+        self.keylogger = _KeyLogger() if _KeyLogger else _NullKeyLogger()
+        self.monitor = _SystemMonitor() if _SystemMonitor else _NullSystemMonitor()
+        self.network_monitor = _NetworkMonitor() if _NetworkMonitor else _NullNetworkMonitor()
         self.host_name = socket.gethostname()
         self.ip_address = self._get_ip()
         self.settings = {}
@@ -236,9 +282,22 @@ class SentinelAgent:
                     risk_level="INFO"
                 )
                 
+                # 3. Pathway 1: Federated Learning Update
+                # Every ~5 minutes (150 loops @ 2s)
+                if loops % 150 == 0:
+                    weights = self.trainer.train()
+                    if weights and self.token:
+                        print("Sending Federated Learning update...")
+                        try:
+                            headers = {"Authorization": f"Bearer {self.token}"}
+                            requests.post(f"{self.base_url}/ml/federated-update", json=weights, headers=headers)
+                        except Exception as e:
+                            print(f"Failed to send FL update: {e}")
+                
         except KeyboardInterrupt:
             print("\nStopping agent...")
             self.keylogger.stop()
+            self.network_monitor.stop()
 
 if __name__ == "__main__":
     agent = SentinelAgent()

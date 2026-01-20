@@ -34,3 +34,9 @@ htmlcov/
 venv/
 env/
 .env
+
+# Tool/Environment specific
+.trae
+.venv
+.claude
+thesis_chapters/

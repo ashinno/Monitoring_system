@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications, soar_engine
 import agent_manager
+import tasks # Explicit import for Celery tasks
 
 # --- DB Setup ---
 models.Base.metadata.create_all(bind=database.engine)
@@ -156,6 +157,7 @@ async def metrics_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = database.SessionLocal()
+    disable_background = os.getenv("SENTINEL_DISABLE_BACKGROUND_TASKS") == "1" or os.getenv("SENTINEL_TESTING") == "1"
     try:
         if not db.query(models.User).first():
             print("Seeding database with default users...")
@@ -216,25 +218,21 @@ async def lifespan(app: FastAPI):
             )
             db.add(settings)
             db.commit()
-            
+        if not disable_background:
+            asyncio.create_task(screenshot_loop())
+            asyncio.create_task(metrics_loop())
+            print("Training Prediction Engine...")
+            prediction_engine.predictor.train(db)
+
+        yield
     finally:
         db.close()
-    
-    # Start screenshot task
-    # Trigger reload
-    asyncio.create_task(screenshot_loop())
-    asyncio.create_task(metrics_loop())
-    
-    # Train Prediction Engine
-    print("Training Prediction Engine...")
-    prediction_engine.predictor.train(db)
-
-    yield
 
 app = FastAPI(title="Sentinel AI Backend", lifespan=lifespan)
 
-# Mount screenshots directory
-app.mount("/screenshots", StaticFiles(directory="screenshots"), name="screenshots")
+screenshots_dir = os.path.join(os.path.dirname(__file__), "screenshots")
+os.makedirs(screenshots_dir, exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=screenshots_dir), name="screenshots")
 
 # CORS
 app.add_middleware(
@@ -460,8 +458,17 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
     log_response = schemas.Log.model_validate(db_log)
     await sio.emit('new_log', log_response.model_dump(by_alias=True))
 
-    # --- SOAR Automation (Background) ---
-    background_tasks.add_task(soar_engine.engine.run_automation, db_log.id)
+    # --- SOAR Automation (Background Task) ---
+    # Using Celery for scalability
+    celery_enabled = os.getenv("SENTINEL_DISABLE_CELERY") != "1"
+    if celery_enabled:
+        try:
+            tasks.run_soar_automation.delay(db_log.id)
+        except Exception as e:
+            print(f"Warning: Async task failed. Scheduling SOAR in-process. Error: {e}")
+            asyncio.create_task(asyncio.to_thread(soar_engine.engine.run_automation, db_log.id))
+    else:
+        asyncio.create_task(asyncio.to_thread(soar_engine.engine.run_automation, db_log.id))
 
     # Notifications
     if settings and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
@@ -485,46 +492,23 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
         except Exception as e:
             print(f"Failed to emit heatmap: {e}")
 
-    # --- Prediction Integration ---
-    try:
-        current_activity = log_data.get('activity_type')
-        if current_activity:
-            # Hybrid Prediction: Try AI first, fallback to Markov if slow/fails or for comparison
-            # For real-time performance, we might race them or prioritize one.
-            # Here we will try AI if risk is HIGH+, otherwise standard Markov.
-            
-            next_steps = []
-            if log_data.get('risk_level') in ['HIGH', 'CRITICAL']:
-                 print(f"High Risk Activity detected ({current_activity}). Invoking AI Prediction...")
-                 next_steps = await prediction_engine.predictor.predict_next_step_ai(current_activity)
-            
-            if not next_steps:
-                # Fallback or standard
-                next_steps = prediction_engine.predictor.predict_next_step(current_activity)
-            
-            # Check for High Risk Predictions
-            for step in next_steps:
-                # AI usually returns 'activity', Markov returns 'activity'
-                act = step.get('activity', 'Unknown')
-                prob = step.get('probability', 0.0)
-                
-                if prob >= 0.7: # Threshold
-                    print(f"PRE-EMPTIVE WARNING: High probability of {act}!")
-                    await sio.emit('security_alert', {
-                        "type": "PREDICTIVE_THREAT",
-                        "message": f"High probability of {act} detected.",
-                        "details": f"Following {current_activity}, there is a {prob*100:.1f}% chance of {act}. Reason: {step.get('reason', 'Pattern Analysis')}",
-                        "timestamp": datetime.now().isoformat()
-                    })
+    # --- Prediction Integration (Background Task) ---
+    # Offload heavy AI prediction to Celery, with fallback
+    if celery_enabled:
+        try:
+            tasks.run_prediction_analysis.delay(db_log.id)
+        except Exception as e:
+            print(f"Warning: Async task failed. Scheduling Prediction in-process. Error: {e}")
+            if db_log.risk_level in ['HIGH', 'CRITICAL']:
+                asyncio.create_task(prediction_engine.predictor.predict_next_step_ai(db_log.activity_type))
+    else:
+        if db_log.risk_level in ['HIGH', 'CRITICAL']:
+            asyncio.create_task(prediction_engine.predictor.predict_next_step_ai(db_log.activity_type))
 
-            # Emit prediction update
-            await sio.emit('prediction_update', {
-                "currentActivity": current_activity,
-                "predictions": next_steps
-            })
-    except Exception as e:
-        print(f"Prediction Error: {e}")
-
+    # Immediate (Fast) Prediction for UI feedback if needed
+    # We can still run the fast Markov prediction here if we want immediate response
+    # but for "Systems" thesis, we rely on async events.
+    
     return db_log
 
 @app.post("/ml/train")
@@ -532,6 +516,23 @@ def train_anomaly_model(db: Session = Depends(get_db), _: models.User = Depends(
     logs = db.query(models.Log).all()
     ml_engine.train_model(logs)
     return {"message": "Model training triggered"}
+
+@app.post("/ml/federated-update")
+def receive_federated_update(weights: dict, _: models.User = Depends(auth.get_current_user)):
+    """
+    Pathway 1: Endpoint to receive model updates from agents.
+    """
+    # In a real system, we'd identify the agent from the token
+    agent_id = "unknown_agent" 
+    ml_engine.federated_aggregator.collect_update(agent_id, weights)
+    
+    # Check if we should aggregate (e.g., if we have enough updates)
+    # For demo, we might aggregate every time or just log it
+    if len(ml_engine.federated_aggregator.local_updates) >= 1: # Simple trigger
+        new_global_model = ml_engine.federated_aggregator.aggregate()
+        return {"status": "accepted", "global_model_updated": True}
+        
+    return {"status": "accepted", "global_model_updated": False}
 
 # Playbook Routes
 @app.get("/playbooks", response_model=List[schemas.Playbook])
@@ -1023,7 +1024,8 @@ async def reset_password(action: schemas.ActionRequest, db: Session = Depends(ge
     }
 
 # Wrap FastAPI with Socket.IO
-app = socketio.ASGIApp(sio, other_asgi_app=app)
+fastapi_app = app
+app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

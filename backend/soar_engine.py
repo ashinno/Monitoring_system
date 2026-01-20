@@ -180,6 +180,55 @@ class SOAREngine:
             except Exception as e:
                 print(f"[SOAR] Failed to send external notification: {e}")
 
+    def _action_block_ip(self, log: models.Log, playbook: models.Playbook, db: Session):
+        """
+        Blocks the IP address associated with the log using system firewall.
+        """
+        ip_address = log.ip_address
+        if not ip_address or ip_address in ["127.0.0.1", "localhost"]:
+            print(f"[SOAR] Cannot block invalid or localhost IP: {ip_address}")
+            return
+
+        import platform
+        import subprocess
+
+        system = platform.system()
+        try:
+            if system == "Linux":
+                # Use iptables (requires root/sudo)
+                cmd = ["sudo", "iptables", "-A", "INPUT", "-s", ip_address, "-j", "DROP"]
+                subprocess.run(cmd, check=True)
+                print(f"[SOAR] Blocked IP {ip_address} using iptables.")
+            elif system == "Darwin": # macOS
+                # Use pf (Packet Filter) - requires sudo and pf enabled
+                # Adding to a table would be better, but for now simple rule injection
+                # This is a bit complex for a one-liner, but let's try a simple approach or log warning
+                # macOS 'pf' usually requires editing pf.conf and reloading.
+                # Alternative: 'route add' to blackhole
+                cmd = ["sudo", "route", "add", ip_address, "127.0.0.1"]
+                subprocess.run(cmd, check=True)
+                print(f"[SOAR] Blocked IP {ip_address} using route blackhole.")
+            else:
+                print(f"[SOAR] Block IP not implemented for {system}")
+                return
+
+            self._log_system_event(
+                db,
+                "SOAR_ACTION",
+                "CRITICAL",
+                f"Blocked IP {ip_address}",
+                f"Triggered by playbook: {playbook.name}"
+            )
+        except Exception as e:
+            print(f"[SOAR] Failed to block IP {ip_address}: {e}")
+            self._log_system_event(
+                db,
+                "SOAR_ERROR",
+                "HIGH",
+                f"Failed to block IP {ip_address}",
+                str(e)
+            )
+
     def _log_system_event(self, db: Session, activity_type: str, risk: str, desc: str, details: str):
         """
         Helper to create a log entry for SOAR actions.

@@ -48,20 +48,28 @@ class MarkovPredictor:
     async def predict_next_step_ai(self, current_activity: str) -> List[Dict[str, Any]]:
         """
         Uses Ollama AI to predict the next likely security event/action based on context.
+        Enhanced for Thesis with Few-Shot prompting and Persona.
         """
         OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
         MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
         
         prompt = f"""
-        You are a predictive security engine.
-        Current User Activity: {current_activity}
+        You are a Predictive Security Engine modeled on the MITRE ATT&CK Framework.
         
-        Based on typical cybersecurity attack patterns (e.g., Mitre ATT&CK), predict the 3 most likely NEXT steps a malicious actor might take.
+        Your Task:
+        Analyze the 'Current User Activity' and predict the 3 most likely NEXT steps a malicious insider might take.
+        
+        Examples:
+        - Input: "User ran 'whoami' and 'net user' commands"
+          Output: [{{"activity": "Privilege Escalation attempt", "probability": 0.9, "reason": "Reconnaissance commands often precede escalation."}}]
+        - Input: "User accessed 'payroll.xls' at 2 AM"
+          Output: [{{"activity": "Data Exfiltration", "probability": 0.85, "reason": "Accessing sensitive files off-hours is highly suspicious."}}]
+          
+        Current User Activity: "{current_activity}"
         
         Return strictly valid JSON format:
         [
-            {{"activity": "Next Action Name", "probability": 0.85, "reason": "Explanation"}},
-            {{"activity": "Alternative Action", "probability": 0.10, "reason": "Explanation"}}
+            {{"activity": "Name of Predicted Action", "probability": 0.0-1.0, "reason": "Technical justification based on security principles"}}
         ]
         """
         

@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Database Service (PostgreSQL) - Replaces SQLite for Scalability
+  db:
+    image: postgres:15-alpine
+    container_name: monitoring_db
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=sentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - monitoring_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Message Broker (Redis) - For Event-Driven Architecture
+  redis:
+    image: redis:7-alpine
+    container_name: monitoring_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - monitoring_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: monitoring_backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://admin:secret@db:5432/sentinel
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+  # Celery Worker - For Asynchronous Task Processing (SOAR, ML)
+  worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: monitoring_worker
+    # Corrected command: point to celery_app.celery_app instead of worker.celery
+    command: celery -A celery_app.celery_app worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://admin:secret@db:5432/sentinel
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - monitoring_net
+
+networks:
+  monitoring_net:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -15,3 +15,8 @@ psutil
 requests
 fpdf
 httpx
+# New dependencies for Scalability & AI
+psycopg2-binary
+celery
+redis
+torch

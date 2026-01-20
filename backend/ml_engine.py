@@ -8,6 +8,7 @@ from datetime import datetime
 
 MODEL_PATH = "anomaly_model.pkl"
 EXPLAINER_PATH = "anomaly_explainer.pkl"
+GLOBAL_MODEL_PATH = "global_model.pkl"
 
 def get_risk_score(risk_level):
     mapping = {
@@ -157,3 +158,63 @@ def explain_prediction(log_features):
     except Exception as e:
         print(f"Error in explanation: {e}")
         return {}
+
+# --- Pathway 1: Federated Learning Support ---
+
+class FederatedAggregator:
+    """
+    Simulates the aggregation of model weights from multiple agents.
+    In a real FL system, we would average the weights of Neural Networks.
+    Since we are using IsolationForest (which is not easily parameter-averaged),
+    we will simulate this by aggregating the 'estimators_' if they were compatible,
+    or more realistically for this Thesis prototype, we switch to a simple 
+    Mean/Variance model for the FL demo.
+    
+    For the Thesis: We will assume the 'Model' being federated is a set of 
+    Thresholds or a simple Neural Network (e.g. Autoencoder) for anomaly detection.
+    """
+    
+    def __init__(self):
+        self.local_updates = []
+        
+    def collect_update(self, agent_id, weights):
+        """
+        Collects weights from an agent.
+        weights: dict of numpy arrays
+        """
+        print(f"Received FL update from Agent {agent_id}")
+        self.local_updates.append(weights)
+        
+    def aggregate(self):
+        """
+        Performs Federated Averaging (FedAvg).
+        """
+        if not self.local_updates:
+            return None
+            
+        print(f"Aggregating updates from {len(self.local_updates)} agents...")
+        
+        # Example: Average the weights (assuming simple dict structure)
+        n_updates = len(self.local_updates)
+        avg_weights = {}
+        
+        # Initialize with first update
+        first_update = self.local_updates[0]
+        for key in first_update:
+            avg_weights[key] = first_update[key] / n_updates
+            
+        # Add rest
+        for i in range(1, n_updates):
+            update = self.local_updates[i]
+            for key in update:
+                avg_weights[key] += update[key] / n_updates
+                
+        # Clear buffer
+        self.local_updates = []
+        
+        # Save Global Model
+        joblib.dump(avg_weights, GLOBAL_MODEL_PATH)
+        print("Global Model updated via Federated Averaging.")
+        return avg_weights
+
+federated_aggregator = FederatedAggregator()

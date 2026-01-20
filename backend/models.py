@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, JSON, DateTime, Text, Float
+from sqlalchemy import Column, String, Integer, Boolean, JSON, DateTime, Text, Float, BigInteger
 from database import Base
 import datetime
 
@@ -81,11 +81,11 @@ class SystemMetric(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.datetime.now)
     cpu_usage = Column(Float)
-    memory_total = Column(Integer)
-    memory_used = Column(Integer)
+    memory_total = Column(BigInteger) # Changed to BigInteger
+    memory_used = Column(BigInteger)  # Changed to BigInteger
     memory_percent = Column(Float)
-    disk_total = Column(Integer)
-    disk_used = Column(Integer)
+    disk_total = Column(BigInteger)   # Changed to BigInteger
+    disk_used = Column(BigInteger)    # Changed to BigInteger
     disk_percent = Column(Float)
 
 
