@@ -1,0 +1,104 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>ML Model Dashboard</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+                .container { max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+                h1, h2 { color: #333; }
+                .model-section { margin-bottom: 40px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+                img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; }
+                .metrics { background-color: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+                pre { margin: 0; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>ML Model Performance Dashboard</h1>
+                <p>Generated on: 2026-01-20 18:20:00.518490</p>
+        
+                <div class="model-section">
+                    <h2>Isolation Forest</h2>
+                    <div class="metrics">
+                        <h3>Key Metrics</h3>
+                        <pre>{
+  "accuracy": 0.9090909090909091,
+  "precision": 0.9350649350649352,
+  "recall": 0.9090909090909091,
+  "f1_score": 0.9138257575757577
+}</pre>
+                    </div>
+                    <div class="grid">
+            
+                        <div>
+                            <h4>Cm</h4>
+                            <img src="isolation_forest_cm.png" alt="isolation_forest_cm.png">
+                        </div>
+                    
+                    </div>
+                </div>
+            
+                <div class="model-section">
+                    <h2>Autoencoder</h2>
+                    <div class="metrics">
+                        <h3>Key Metrics</h3>
+                        <pre>{
+  "accuracy": 0.7272727272727273,
+  "precision": 0.5887445887445888,
+  "recall": 0.7272727272727273,
+  "f1_score": 0.6507177033492823
+}</pre>
+                    </div>
+                    <div class="grid">
+            
+                        <div>
+                            <h4>Loss Curve</h4>
+                            <img src="autoencoder_loss_curve.png" alt="autoencoder_loss_curve.png">
+                        </div>
+                    
+                        <div>
+                            <h4>Cm</h4>
+                            <img src="autoencoder_cm.png" alt="autoencoder_cm.png">
+                        </div>
+                    
+                    </div>
+                </div>
+            
+                <div class="model-section">
+                    <h2>Xgboost</h2>
+                    <div class="metrics">
+                        <h3>Key Metrics</h3>
+                        <pre>{
+  "accuracy": 0.7727272727272727,
+  "precision": 0.597107438016529,
+  "recall": 0.7727272727272727,
+  "f1_score": 0.6736596736596737,
+  "roc_auc": 0.5
+}</pre>
+                    </div>
+                    <div class="grid">
+            
+                        <div>
+                            <h4>Cm</h4>
+                            <img src="xgboost_cm.png" alt="xgboost_cm.png">
+                        </div>
+                    
+                        <div>
+                            <h4>Roc Curve</h4>
+                            <img src="xgboost_roc_curve.png" alt="xgboost_roc_curve.png">
+                        </div>
+                    
+                        <div>
+                            <h4>Pr Curve</h4>
+                            <img src="xgboost_pr_curve.png" alt="xgboost_pr_curve.png">
+                        </div>
+                    
+                    </div>
+                </div>
+            
+            </div>
+        </body>
+        </html>
+        

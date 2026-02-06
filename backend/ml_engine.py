@@ -1,13 +1,34 @@
+
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import IsolationForest
 import joblib
 import os
 import shap
 from datetime import datetime
+from sqlalchemy.orm import Session
 
-MODEL_PATH = "anomaly_model.pkl"
-EXPLAINER_PATH = "anomaly_explainer.pkl"
+# Import new ML components
+# Try relative import, fall back to absolute
+try:
+    from backend.ml.trainer import ModelTrainer
+    from backend.ml.models import IsolationForestModel
+    from backend.ml.pipeline import DataPipeline
+except ImportError:
+    try:
+        from .ml.trainer import ModelTrainer
+        from .ml.models import IsolationForestModel
+        from .ml.pipeline import DataPipeline
+    except ImportError:
+        # Last resort for when running tests where backend is not in path as a package
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from ml.trainer import ModelTrainer
+        from ml.models import IsolationForestModel
+        from ml.pipeline import DataPipeline
+
+MODEL_PATH = "ml_artifacts/isolation_forest.pkl"
+EXPLAINER_PATH = "ml_artifacts/isolation_forest_explainer.pkl"
 GLOBAL_MODEL_PATH = "global_model.pkl"
 
 def get_risk_score(risk_level):
@@ -22,10 +43,9 @@ def get_risk_score(risk_level):
 
 def extract_features(log_data):
     """
-    Extract features from a single log entry (dict) or a DataFrame row.
-    Returns a list or array of features: [hour, day_of_week, risk_score]
+    Legacy feature extraction for compatibility or fallback.
+    The new pipeline handles this internally.
     """
-    # Handle timestamp
     ts_str = log_data.get('timestamp')
     if not ts_str:
         now = datetime.now()
@@ -42,77 +62,48 @@ def extract_features(log_data):
             hour = now.hour
             day = now.weekday()
 
-    # Handle risk score
     risk_level = log_data.get('risk_level', 'INFO')
     risk_score = get_risk_score(risk_level)
 
     return [hour, day, risk_score]
 
-def train_model(logs):
+def train_model(db: Session):
     """
-    Train IsolationForest on the provided logs.
-    logs: List of log objects or dicts.
+    Trigger the new training pipeline.
     """
-    if not logs:
-        print("No logs provided for training.")
-        return
-
-    # Convert to list of dicts if they are SQLAlchemy objects
-    data = []
-    for log in logs:
-        if hasattr(log, '__dict__'):
-            d = log.__dict__.copy()
-            # Remove SQLAlchemy internal state if present
-            d.pop('_sa_instance_state', None)
-            data.append(d)
-        elif isinstance(log, dict):
-            data.append(log)
-        else:
-            continue
-
-    if not data:
-        return
-
-    df = pd.DataFrame(data)
+    print("Starting ML Model Training...")
+    trainer = ModelTrainer(db)
+    trainer.train_all()
     
-    # Feature Engineering
-    features_list = []
-    for _, row in df.iterrows():
-        features_list.append(extract_features(row))
-    
-    X = np.array(features_list)
-    
-    # Train IsolationForest
-    # contamination='auto' or small value e.g. 0.05
-    clf = IsolationForest(random_state=42, contamination=0.05)
-    clf.fit(X)
-    
-    # Save model
-    joblib.dump(clf, MODEL_PATH)
-    
-    # Create and save SHAP explainer
-    explainer = shap.TreeExplainer(clf)
-    joblib.dump(explainer, EXPLAINER_PATH)
-    
-    print(f"Model trained on {len(X)} records and saved to {MODEL_PATH}")
+    # Evaluate and print results
+    results = trainer.evaluate()
+    print("Training Results:", results)
 
 def predict_anomaly(new_log):
     """
-    Predict if a new log is an anomaly.
+    Predict if a new log is an anomaly using the new IsolationForestModel.
     new_log: dict
     Returns: -1 (Anomaly), 1 (Normal)
     """
-    if not os.path.exists(MODEL_PATH):
-        # If model doesn't exist, we can't predict. Assume Normal.
-        return 1
-
     try:
-        clf = joblib.load(MODEL_PATH)
+        # Load pipeline artifacts to preprocess the single log
+        pipeline = DataPipeline()
+        if not pipeline.load_artifacts():
+             # Fallback if no artifacts (not trained yet)
+             return 1
+             
+        # Convert log to DataFrame
+        df = pd.DataFrame([new_log])
         
-        features = extract_features(new_log)
-        X_new = np.array([features])
+        # Preprocess
+        X = pipeline.preprocess(df, training=False)
         
-        prediction = clf.predict(X_new)
+        # Load Model
+        model = IsolationForestModel()
+        if not model.load():
+            return 1
+            
+        prediction = model.predict(X)
         return prediction[0]
     except Exception as e:
         print(f"Error in prediction: {e}")
@@ -121,43 +112,11 @@ def predict_anomaly(new_log):
 def explain_prediction(log_features):
     """
     Calculate SHAP values for the specific log entry.
-    log_features: list or array [hour, day, risk_score]
-    Returns: JSON object mapping feature names to their impact score.
+    Note: SHAP explanation needs to be adapted to the new pipeline.
+    For now, we return a placeholder or adapt if possible.
     """
-    if not os.path.exists(EXPLAINER_PATH):
-        return {}
-
-    try:
-        explainer = joblib.load(EXPLAINER_PATH)
-        
-        # shap_values returns a matrix if input is 2D, or list of arrays.
-        # TreeExplainer for IsolationForest:
-        # shap_values shape for single sample: (1, n_features)
-        
-        X_new = np.array([log_features])
-        shap_values = explainer.shap_values(X_new)
-        
-        # shap_values might be a list (one for each class) or array.
-        # For IsolationForest, it usually returns just the values for the score.
-        
-        # Check shape
-        # If shap_values is a list, take the first element (though IsolationForest is usually single output)
-        if isinstance(shap_values, list):
-             shap_values = shap_values[0]
-             
-        # Now shap_values should be (1, n_features)
-        vals = shap_values[0]
-        
-        feature_names = ["hour_of_day", "day_of_week", "risk_score"]
-        
-        explanation = {}
-        for name, val in zip(feature_names, vals):
-            explanation[name] = round(float(val), 4)
-            
-        return explanation
-    except Exception as e:
-        print(f"Error in explanation: {e}")
-        return {}
+    # TODO: Update SHAP integration with the new pipeline features
+    return {}
 
 # --- Pathway 1: Federated Learning Support ---
 

@@ -44,3 +44,6 @@ screenshots/
 reports/
 test-results/
 *.pkl
+thesis_figures/
+thesis_combined/
+thesis/
