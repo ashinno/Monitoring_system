@@ -98,6 +98,27 @@ Configuration panel for managing monitoring rules, content filters, and screensh
    ```
    The backend API will run on `http://localhost:8000`.
 
+### ML Retraining (Improved)
+You can trigger stronger retraining with configurable parameters:
+
+```bash
+curl -X POST http://localhost:8000/ml/train \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data_limit": 50000,
+    "validation_split": 0.2,
+    "autoencoder_epochs": 80,
+    "autoencoder_batch_size": 64
+  }'
+```
+
+Optional environment variables for model tuning:
+- `ML_IFOREST_ESTIMATORS` (default: `300`)
+- `ML_IFOREST_CONTAMINATION` (default: `0.05`)
+- `ML_AE_LR` (default: `0.001`)
+- `ML_TRAIN_LIMIT` (default: `50000`)
+
 ### Agent Setup
 1. Navigate to the agent directory:
    ```bash

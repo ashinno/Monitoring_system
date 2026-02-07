@@ -6,12 +6,14 @@ from datetime import datetime
 def test_ml_train_endpoint_triggers_training(client, auth_headers, backend_app_module, monkeypatch):
     called = {"count": 0}
 
-    def fake_train_model(logs):
+    def fake_train_model(data_source, train_config=None):
         called["count"] += 1
-        assert isinstance(logs, list)
+        # endpoint now passes SQLAlchemy Session
+        assert data_source is not None
+        assert isinstance(train_config, dict)
 
     monkeypatch.setattr(backend_app_module.ml_engine, "train_model", fake_train_model)
-    res = client.post("/ml/train", headers=auth_headers)
+    res = client.post("/ml/train", json={"autoencoder_epochs": 10, "data_limit": 5000}, headers=auth_headers)
     assert res.status_code == 200
     assert called["count"] == 1
 
@@ -27,6 +29,36 @@ def test_ml_federated_update_endpoint_accepts_weights(client, auth_headers, back
         def aggregate(self):
             return {"ok": True}
 
+        def start_round(self, min_clients=None, timeout_seconds=None, round_id=None):
+            return {
+                "round_id": round_id or "round-test",
+                "min_clients": min_clients or 1,
+                "timeout_seconds": timeout_seconds or 300,
+                "submitted_clients": 0,
+                "revealed_clients": 0,
+                "pending_reveals": 0,
+                "finalized": False,
+            }
+
+        def get_round_status(self, round_id):
+            return {
+                "round_id": round_id,
+                "min_clients": 1,
+                "timeout_seconds": 300,
+                "submitted_clients": 1,
+                "revealed_clients": 1,
+                "pending_reveals": 0,
+                "finalized": False,
+            }
+
+        def reveal_mask(self, round_id, agent_id, mask):
+            return {
+                "accepted": True,
+                "global_model_updated": True,
+                "round": self.get_round_status(round_id),
+                "aggregate": {"round_id": round_id, "feature_vector": mask},
+            }
+
     monkeypatch.setattr(backend_app_module.ml_engine, "federated_aggregator", AggregatorStub())
 
     res = client.post("/ml/federated-update", json={"w": [1, 2, 3]}, headers=auth_headers)
@@ -34,6 +66,94 @@ def test_ml_federated_update_endpoint_accepts_weights(client, auth_headers, back
     body = res.json()
     assert body["status"] == "accepted"
     assert body["global_model_updated"] is True
+    assert body["mode"] == "legacy"
+
+
+def test_secure_federated_round_endpoints(client, auth_headers, backend_app_module, monkeypatch):
+    class AggregatorStub:
+        def __init__(self):
+            self.latest_secure_global = {"round_id": "round-1", "feature_vector": [0.1, 0.2, 0.3]}
+
+        def start_round(self, min_clients=None, timeout_seconds=None, round_id=None):
+            return {
+                "round_id": round_id or "round-1",
+                "min_clients": min_clients or 2,
+                "timeout_seconds": timeout_seconds or 300,
+                "submitted_clients": 0,
+                "revealed_clients": 0,
+                "pending_reveals": 0,
+                "finalized": False,
+            }
+
+        def get_round_status(self, round_id):
+            return {
+                "round_id": round_id,
+                "min_clients": 2,
+                "timeout_seconds": 300,
+                "submitted_clients": 1,
+                "revealed_clients": 0,
+                "pending_reveals": 1,
+                "finalized": False,
+            }
+
+        def collect_update(self, agent_id, payload):
+            return {
+                "mode": "secure",
+                "accepted": True,
+                "global_model_updated": False,
+                "round": self.get_round_status(payload["round_id"]),
+            }
+
+        def reveal_mask(self, round_id, agent_id, mask):
+            return {
+                "accepted": True,
+                "global_model_updated": True,
+                "round": {
+                    "round_id": round_id,
+                    "min_clients": 2,
+                    "timeout_seconds": 300,
+                    "submitted_clients": 2,
+                    "revealed_clients": 2,
+                    "pending_reveals": 0,
+                    "finalized": True,
+                },
+                "aggregate": {"round_id": round_id, "feature_vector": mask},
+            }
+
+    monkeypatch.setattr(backend_app_module.ml_engine, "federated_aggregator", AggregatorStub())
+
+    start = client.post("/ml/federated/rounds/start", json={"min_clients": 2}, headers=auth_headers)
+    assert start.status_code == 200
+    round_id = start.json()["round"]["round_id"]
+
+    submit = client.post(
+        "/ml/federated-update",
+        json={
+            "round_id": round_id,
+            "masked_update": [0.1, 0.2, 0.3],
+            "num_samples": 10,
+            "dp": {"epsilon": 1.0},
+        },
+        headers=auth_headers,
+    )
+    assert submit.status_code == 200
+    assert submit.json()["mode"] == "secure"
+
+    reveal = client.post(
+        "/ml/federated/reveal-mask",
+        json={"round_id": round_id, "mask": [0.01, 0.01, 0.01]},
+        headers=auth_headers,
+    )
+    assert reveal.status_code == 200
+    assert reveal.json()["global_model_updated"] is True
+
+    status = client.get(f"/ml/federated/rounds/{round_id}", headers=auth_headers)
+    assert status.status_code == 200
+    assert status.json()["round"]["round_id"] == round_id
+
+    global_model = client.get("/ml/federated/global-model", headers=auth_headers)
+    assert global_model.status_code == 200
+    assert global_model.json()["global_model"]["round_id"] == "round-1"
 
 
 def test_analyze_endpoint_returns_analysis_result(client, auth_headers, backend_app_module, monkeypatch):

@@ -67,6 +67,8 @@ def test_pipeline_preprocessing(backend_app_module, populate_db, clean_artifacts
     
     assert X.shape[0] == 55
     assert 'hour' in X.columns
+    assert 'hour_sin' in X.columns
+    assert 'description_length' in X.columns
     assert 'user_encoded' in X.columns
     
     # Test loading artifacts
@@ -89,7 +91,7 @@ def test_models_training(backend_app_module, populate_db, clean_artifacts):
     ModelTrainer = backend_app_module.ml_engine.ModelTrainer
     
     # Set custom artifact path for models
-    trainer = ModelTrainer(populate_db)
+    trainer = ModelTrainer(populate_db, autoencoder_epochs=5, autoencoder_batch_size=8)
     trainer.pipeline.artifact_dir = clean_artifacts
     trainer.evaluator.artifact_dir = clean_artifacts # FIX: Update evaluator artifact dir
     for name, model in trainer.models.items():
@@ -115,6 +117,37 @@ def test_models_training(backend_app_module, populate_db, clean_artifacts):
          assert True
 
 
+def test_training_entrypoint_accepts_config(backend_app_module, populate_db, monkeypatch):
+    captured = {}
+
+    class TrainerStub:
+        def __init__(self, db, **kwargs):
+            captured["db"] = db
+            captured["kwargs"] = kwargs
+
+        def train_all(self):
+            captured["trained"] = True
+
+        def evaluate(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(backend_app_module.ml_engine, "ModelTrainer", TrainerStub)
+    backend_app_module.ml_engine.train_model(
+        populate_db,
+        train_config={
+            "data_limit": 1234,
+            "validation_split": 0.25,
+            "random_state": 7,
+            "autoencoder_epochs": 3,
+            "autoencoder_batch_size": 4,
+        },
+    )
+
+    assert captured.get("trained") is True
+    assert captured["kwargs"]["data_limit"] == 1234
+    assert captured["kwargs"]["autoencoder_epochs"] == 3
+
+
     # Test Evaluation
     # results = trainer.evaluate() # Legacy method, now handled in train_all
     # assert "xgboost_accuracy" in results # Might be disabled
@@ -138,6 +171,12 @@ def test_autoencoder_inference(backend_app_module, clean_artifacts):
     X = pd.DataFrame({
         'hour': [0.1, 0.2, 0.1],
         'day_of_week': [0.1, 0.2, 0.1],
+        'hour_sin': [0.0, 0.5, 0.0],
+        'hour_cos': [1.0, 0.9, 1.0],
+        'dow_sin': [0.0, 0.4, 0.0],
+        'dow_cos': [1.0, 0.9, 1.0],
+        'description_length': [10.0, 15.0, 9.0],
+        'description_token_count': [2.0, 3.0, 2.0],
         'user_encoded': [1, 1, 1],
         'activity_type_encoded': [1, 1, 1]
     })

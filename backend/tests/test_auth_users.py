@@ -1,10 +1,13 @@
 import uuid
+import os
 
 
 def test_token_success(client):
+    admin_id = os.environ.get("DEFAULT_ADMIN_ID", "admin")
+    admin_password = os.environ.get("DEFAULT_ADMIN_PASSWORD", "admin")
     res = client.post(
         "/token",
-        data={"username": "admin", "password": "admin"},
+        data={"username": admin_id, "password": admin_password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert res.status_code == 200
@@ -14,9 +17,10 @@ def test_token_success(client):
 
 
 def test_token_invalid_credentials(client):
+    admin_id = os.environ.get("DEFAULT_ADMIN_ID", "admin")
     res = client.post(
         "/token",
-        data={"username": "admin", "password": "wrong"},
+        data={"username": admin_id, "password": "wrong"},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     assert res.status_code == 401
@@ -28,10 +32,11 @@ def test_users_me_requires_auth(client):
 
 
 def test_users_me_returns_current_user(client, auth_headers):
+    admin_id = os.environ.get("DEFAULT_ADMIN_ID", "admin")
     res = client.get("/users/me", headers=auth_headers)
     assert res.status_code == 200
     body = res.json()
-    assert body["id"] == "admin"
+    assert body["id"] == admin_id
     assert body["name"]
 
 

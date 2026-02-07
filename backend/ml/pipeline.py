@@ -3,10 +3,8 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
 import joblib
 import os
-from datetime import datetime
 import sys
 
 # Add parent directory to path to import models
@@ -14,8 +12,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import models
 
 class DataPipeline:
-    def __init__(self, artifact_dir="ml_artifacts"):
+    def __init__(self, artifact_dir="ml_artifacts", data_limit=50000):
         self.artifact_dir = artifact_dir
+        self.data_limit = data_limit
         if not os.path.exists(artifact_dir):
             os.makedirs(artifact_dir)
             
@@ -23,9 +22,10 @@ class DataPipeline:
         self.encoders = {}
         self.feature_columns = []
 
-    def load_data(self, db: Session, limit=10000):
+    def load_data(self, db: Session, limit=None):
         """Load logs from database into a pandas DataFrame."""
-        query = db.query(models.Log).order_by(models.Log.timestamp.desc()).limit(limit)
+        effective_limit = self.data_limit if limit is None else limit
+        query = db.query(models.Log).order_by(models.Log.timestamp.desc()).limit(effective_limit)
         logs = query.all()
         
         if not logs:
@@ -54,10 +54,26 @@ class DataPipeline:
         df = df.copy()
         
         # Time features
-        # Handle ISO format strings
-        df['dt'] = pd.to_datetime(df['timestamp'])
+        # Handle ISO format strings robustly
+        df['dt'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        if df['dt'].isna().any():
+            df['dt'] = df['dt'].fillna(pd.Timestamp.utcnow())
         df['hour'] = df['dt'].dt.hour
         df['day_of_week'] = df['dt'].dt.dayofweek
+
+        if 'description' not in df.columns:
+            df['description'] = ''
+
+        # Cyclical encodings (better temporal learning)
+        df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+        df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+        df['dow_sin'] = np.sin(2 * np.pi * df['day_of_week'] / 7)
+        df['dow_cos'] = np.cos(2 * np.pi * df['day_of_week'] / 7)
+
+        # Lightweight text-derived behavior features
+        df['description'] = df['description'].fillna('').astype(str)
+        df['description_length'] = df['description'].str.len().astype(float)
+        df['description_token_count'] = df['description'].str.split().str.len().fillna(0).astype(float)
         
         # Categorical features to encode
         cat_features = ['user', 'activity_type']
@@ -86,7 +102,12 @@ class DataPipeline:
         # We might want to scale hour/day if using distance-based models (SVM/KNN), 
         # but for Trees (RF/XGB) it's not strictly necessary. 
         # We'll scale them to be safe for all model types.
-        num_features = ['hour', 'day_of_week']
+        num_features = [
+            'hour', 'day_of_week',
+            'hour_sin', 'hour_cos',
+            'dow_sin', 'dow_cos',
+            'description_length', 'description_token_count'
+        ]
         
         if training:
             scaler = StandardScaler()
@@ -98,7 +119,13 @@ class DataPipeline:
                 df[num_features] = scaler.transform(df[num_features])
 
         # Select final features
-        self.feature_columns = ['hour', 'day_of_week', 'user_encoded', 'activity_type_encoded']
+        self.feature_columns = [
+            'hour', 'day_of_week',
+            'hour_sin', 'hour_cos',
+            'dow_sin', 'dow_cos',
+            'description_length', 'description_token_count',
+            'user_encoded', 'activity_type_encoded'
+        ]
         X = df[self.feature_columns]
         
         return X

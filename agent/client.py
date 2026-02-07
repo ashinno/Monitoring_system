@@ -8,6 +8,10 @@ import json
 from datetime import datetime
 from config import Config
 from encryption import Encryptor
+try:
+    from local_trainer import local_trainer
+except Exception:
+    local_trainer = None
 
 try:
     from logger_service import KeyLogger as _KeyLogger
@@ -71,6 +75,23 @@ class _NullCameraMonitor:
     def poll(self):
         return None
 
+
+class _NullLocalTrainer:
+    def __init__(self):
+        self.last_round_id = None
+
+    def add_log(self, _entry):
+        return None
+
+    def train(self):
+        return None
+
+    def build_secure_update(self, **_kwargs):
+        return None
+
+    def build_mask_reveal(self):
+        return None
+
 class SentinelAgent:
     def __init__(self):
         self.base_url = Config.BASE_URL
@@ -86,6 +107,7 @@ class SentinelAgent:
         self.ip_address = self._get_ip()
         self.settings = {}
         self.warning_shown = False
+        self.trainer = local_trainer if local_trainer else _NullLocalTrainer()
 
     def _get_ip(self):
         try:
@@ -189,8 +211,101 @@ class SentinelAgent:
                 print(f"Failed to send log: {response.text}")
             else:
                 print(f"Sent {activity_type} log.")
+                try:
+                    self.trainer.add_log({
+                        "timestamp": log_data["timestamp"],
+                        "risk_level": log_data["risk_level"],
+                    })
+                except Exception:
+                    pass
         except Exception as e:
             print(f"Error sending log: {e}")
+
+    def _fetch_or_start_fl_round(self, headers):
+        round_id = getattr(self.trainer, "last_round_id", None)
+        if round_id:
+            try:
+                status_res = requests.get(f"{self.base_url}/ml/federated/rounds/{round_id}", headers=headers, timeout=5)
+                if status_res.status_code == 200:
+                    body = status_res.json()
+                    round_data = body.get("round", {})
+                    if not round_data.get("finalized"):
+                        return round_data
+            except Exception:
+                pass
+
+        try:
+            start_res = requests.post(
+                f"{self.base_url}/ml/federated/rounds/start",
+                json={"min_clients": 1, "timeout_seconds": 300},
+                headers=headers,
+                timeout=5,
+            )
+            if start_res.status_code == 200:
+                return start_res.json().get("round")
+        except Exception:
+            pass
+        return None
+
+    def _send_federated_secure_update(self):
+        if not self.token:
+            return
+
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+        round_data = self._fetch_or_start_fl_round(headers)
+        if not round_data:
+            print("Failed to get federated round state.")
+            return
+
+        round_id = round_data.get("round_id")
+        if not round_id:
+            print("Invalid federated round data.")
+            return
+
+        payload = self.trainer.build_secure_update(
+            round_id=round_id,
+            min_clients=round_data.get("min_clients", 1),
+            timeout_seconds=round_data.get("timeout_seconds", 300),
+        )
+        if not payload:
+            print("No local trainer feature vector available for secure FL update.")
+            return
+
+        payload["agent_id"] = self.host_name
+
+        try:
+            update_res = requests.post(
+                f"{self.base_url}/ml/federated-update",
+                json=payload,
+                headers=headers,
+                timeout=10,
+            )
+            if update_res.status_code != 200:
+                print(f"Failed to send secure FL update: {update_res.text}")
+                return
+        except Exception as e:
+            print(f"Failed to send secure FL update: {e}")
+            return
+
+        reveal = self.trainer.build_mask_reveal()
+        if not reveal:
+            return
+        reveal["agent_id"] = self.host_name
+
+        try:
+            reveal_res = requests.post(
+                f"{self.base_url}/ml/federated/reveal-mask",
+                json=reveal,
+                headers=headers,
+                timeout=10,
+            )
+            if reveal_res.status_code != 200:
+                print(f"Mask reveal failed: {reveal_res.text}")
+        except Exception as e:
+            print(f"Mask reveal failed: {e}")
 
     def manage_screen_time(self):
         # Handle camelCase (API) or snake_case
@@ -354,8 +469,7 @@ class SentinelAgent:
                     if weights and self.token:
                         print("Sending Federated Learning update...")
                         try:
-                            headers = {"Authorization": f"Bearer {self.token}"}
-                            requests.post(f"{self.base_url}/ml/federated-update", json=weights, headers=headers)
+                            self._send_federated_secure_update()
                         except Exception as e:
                             print(f"Failed to send FL update: {e}")
                 

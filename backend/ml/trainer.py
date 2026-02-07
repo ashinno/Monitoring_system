@@ -1,20 +1,41 @@
 
 from sqlalchemy.orm import Session
+import os
 from .pipeline import DataPipeline
 from .models import IsolationForestModel, AutoEncoderModel, XGBoostRiskModel
 from .evaluator import ModelEvaluator
-import pandas as pd
 import numpy as np
-from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 
 class ModelTrainer:
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        data_limit=50000,
+        validation_split=0.2,
+        random_state=42,
+        autoencoder_epochs=80,
+        autoencoder_batch_size=64,
+    ):
         self.db = db
-        self.pipeline = DataPipeline()
+        self.pipeline = DataPipeline(data_limit=data_limit)
+        self.validation_split = max(0.1, min(validation_split, 0.4))
+        self.random_state = random_state
+        self.autoencoder_epochs = int(autoencoder_epochs)
+        self.autoencoder_batch_size = int(autoencoder_batch_size)
+
+        contamination = float(os.getenv("ML_IFOREST_CONTAMINATION", "0.05"))
+        if contamination <= 0 or contamination >= 0.5:
+            contamination = 0.05
+
         self.models = {
-            "isolation_forest": IsolationForestModel(),
-            "autoencoder": AutoEncoderModel(),
+            "isolation_forest": IsolationForestModel(
+                n_estimators=int(os.getenv("ML_IFOREST_ESTIMATORS", "300")),
+                contamination=contamination,
+            ),
+            "autoencoder": AutoEncoderModel(
+                learning_rate=float(os.getenv("ML_AE_LR", "0.001")),
+            ),
             "xgboost": XGBoostRiskModel()
         }
         self.evaluator = ModelEvaluator()
@@ -38,7 +59,13 @@ class ModelTrainer:
         y = df['risk_level'].map(lambda x: risk_map.get(x, 0))
 
         # Split for validation (simple 80/20)
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, X_val, y_train, y_val = train_test_split(
+            X,
+            y,
+            test_size=self.validation_split,
+            random_state=self.random_state,
+            stratify=y if len(set(y.tolist())) > 1 else None,
+        )
 
         # 3. Train Unsupervised Models
         print("Training Unsupervised Models...")
@@ -56,7 +83,11 @@ class ModelTrainer:
         self.evaluator.plot_feature_importance(self.models["isolation_forest"].model, self.pipeline.feature_columns, "isolation_forest")
         
         # AutoEncoder
-        history = self.models["autoencoder"].train(X_train, epochs=50)
+        history = self.models["autoencoder"].train(
+            X_train,
+            epochs=self.autoencoder_epochs,
+            batch_size=self.autoencoder_batch_size,
+        )
         self.models["autoencoder"].save()
         self.evaluator.plot_training_curves(history, "autoencoder")
         

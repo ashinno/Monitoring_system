@@ -23,6 +23,10 @@ export default defineConfig({
         SENTINEL_DISABLE_CELERY: "1",
         DATABASE_URL: "sqlite:///./sentinel_e2e.db",
         SECRET_KEY: "test-secret-key",
+        DEFAULT_ADMIN_ID: "admin",
+        DEFAULT_ADMIN_PASSWORD: "admin",
+        DEFAULT_ANALYST_ID: "analyst",
+        DEFAULT_ANALYST_PASSWORD: "password",
       },
     },
     {

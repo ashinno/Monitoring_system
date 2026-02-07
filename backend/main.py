@@ -12,11 +12,13 @@ import os
 import uuid
 import httpx
 import json
+import joblib
 from datetime import datetime, timedelta
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications, soar_engine
 import agent_manager
 import tasks # Explicit import for Celery tasks
+from config import settings
 
 # --- DB Setup ---
 models.Base.metadata.create_all(bind=database.engine)
@@ -98,8 +100,8 @@ async def screenshot_loop():
     while True:
         try:
             db = database.SessionLocal()
-            settings = db.query(models.Settings).first()
-            if settings and settings.capture_screenshots:
+            db_settings = db.query(models.Settings).first()
+            if db_settings and db_settings.capture_screenshots:
                 # Ensure directory exists
                 os.makedirs("screenshots", exist_ok=True)
                 
@@ -180,24 +182,24 @@ async def lifespan(_: FastAPI):
             print("Seeding database with default users...")
             # Admin
             admin = models.User(
-                id="admin",
-                name="Admin User",
+                id=settings.DEFAULT_ADMIN_ID,
+                name=settings.DEFAULT_ADMIN_NAME,
                 role="Administrator",
                 clearance_level="ADMIN",
                 status="ACTIVE",
                 permissions=["READ_LOGS", "EDIT_SETTINGS", "MANAGE_USERS", "EXPORT_DATA"],
-                hashed_password=auth.get_password_hash("admin"),
+                hashed_password=auth.get_password_hash(settings.DEFAULT_ADMIN_PASSWORD),
                 avatar_seed="admin"
             )
             # Analyst
             analyst = models.User(
-                id="analyst",
-                name="Alice Williams",
+                id=settings.DEFAULT_ANALYST_ID,
+                name=settings.DEFAULT_ANALYST_NAME,
                 role="Security Analyst",
                 clearance_level="L2",
                 status="ACTIVE",
                 permissions=["READ_LOGS", "EXPORT_DATA"],
-                hashed_password=auth.get_password_hash("password"),
+                hashed_password=auth.get_password_hash(settings.DEFAULT_ANALYST_PASSWORD),
                 avatar_seed="alice"
             )
             db.add(admin)
@@ -223,7 +225,7 @@ async def lifespan(_: FastAPI):
         # Seed Settings if empty
         if not db.query(models.Settings).first():
             print("Seeding default settings...")
-            settings = models.Settings(
+            default_settings = models.Settings(
                 id=1,
                 block_gambling=True,
                 block_social_media=False,
@@ -233,7 +235,7 @@ async def lifespan(_: FastAPI):
                 capture_screenshots=False,
                 keywords=["password", "confidential", "secret", "key"]
             )
-            db.add(settings)
+            db.add(default_settings)
             db.commit()
         if not disable_background:
             asyncio.create_task(screenshot_loop())
@@ -254,14 +256,14 @@ app.mount("/screenshots", StaticFiles(directory=screenshots_dir), name="screensh
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for local dev
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Socket.IO
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins=settings.CORS_ALLOWED_ORIGINS)
 
 # Dependencies
 def get_db():
@@ -426,28 +428,28 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
     log_data = log.model_dump()
     
     # Check Settings for policy enforcement
-    settings = db.query(models.Settings).first()
-    if settings:
+    settings_obj = db.query(models.Settings).first()
+    if settings_obj:
         desc = log_data.get('description', '').lower()
         details = log_data.get('details', '').lower()
         
         # Keyword Alert
-        if settings.alert_on_keywords:
-            keywords = [k.lower() for k in (settings.keywords or [])]
+        if settings_obj.alert_on_keywords:
+            keywords = [k.lower() for k in (settings_obj.keywords or [])]
             if any(k in desc for k in keywords) or any(k in details for k in keywords):
                  if log_data.get('risk_level') not in ['HIGH', 'CRITICAL']:
                     log_data['risk_level'] = 'HIGH'
                     log_data['description'] = log_data['description'] + " [KEYWORD DETECTED]"
 
         # Gambling Block
-        if settings.block_gambling:
+        if settings_obj.block_gambling:
             gambling_terms = ["casino", "bet", "poker", "gambling", "lottery"]
             if any(k in desc for k in gambling_terms) or any(k in details for k in gambling_terms):
                 log_data['risk_level'] = 'CRITICAL'
                 log_data['description'] = log_data['description'] + " [POLICY VIOLATION: GAMBLING]"
 
         # Social Media Block
-        if settings.block_social_media:
+        if settings_obj.block_social_media:
             social_terms = ["facebook", "twitter", "instagram", "tiktok", "linkedin"]
             if any(k in desc for k in social_terms) or any(k in details for k in social_terms):
                 if log_data.get('risk_level') != 'CRITICAL': # Don't downgrade if already critical (e.g. gambling)
@@ -488,8 +490,8 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
         asyncio.create_task(asyncio.to_thread(soar_engine.engine.run_automation, db_log.id))
 
     # Notifications
-    if settings and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
-        notifications.send_alert(db_log, settings)
+    if settings_obj and (log_data.get('risk_level') in ['HIGH', 'CRITICAL']):
+        notifications.send_alert(db_log, settings_obj)
     
     # --- Real-time Heatmap ---
     if log_data.get('activity_type') == 'KEYLOG' and log_data.get('activity_summary'):
@@ -529,27 +531,117 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
     return db_log
 
 @app.post("/ml/train")
-def train_anomaly_model(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
-    # logs = db.query(models.Log).all() # No longer needed, passing db session
-    ml_engine.train_model(db)
+def train_anomaly_model(payload: dict = None, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
+    config = payload or {}
+    ml_engine.train_model(db, train_config=config)
     return {"message": "Model training triggered"}
 
 @app.post("/ml/federated-update")
-def receive_federated_update(weights: dict, _: models.User = Depends(auth.get_current_user)):
+def receive_federated_update(weights: dict, current_user: models.User = Depends(auth.get_current_user)):
     """
-    Pathway 1: Endpoint to receive model updates from agents.
+    Endpoint to receive federated updates.
+
+    Supports both:
+    - Legacy FedAvg payloads
+    - Secure Aggregation + Differential Privacy payloads
     """
-    # In a real system, we'd identify the agent from the token
-    agent_id = "unknown_agent" 
-    ml_engine.federated_aggregator.collect_update(agent_id, weights)
-    
-    # Check if we should aggregate (e.g., if we have enough updates)
-    # For demo, we might aggregate every time or just log it
-    if len(ml_engine.federated_aggregator.local_updates) >= 1: # Simple trigger
-        ml_engine.federated_aggregator.aggregate()
-        return {"status": "accepted", "global_model_updated": True}
-        
-    return {"status": "accepted", "global_model_updated": False}
+    agent_id = str(
+        weights.get("agent_id")
+        or weights.get("agentId")
+        or current_user.id
+        or current_user.name
+    )
+
+    try:
+        result = ml_engine.federated_aggregator.collect_update(agent_id, weights)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if result is None:
+        result = {"mode": "legacy", "accepted": True, "global_model_updated": False}
+
+    mode = result.get("mode", "legacy")
+    accepted = result.get("accepted", True)
+
+    response = {
+        "status": "accepted" if accepted else "rejected",
+        "mode": mode,
+        "global_model_updated": bool(result.get("global_model_updated", False)),
+        "details": result,
+    }
+
+    if mode == "legacy" and accepted:
+        min_clients = max(1, int(weights.get("min_clients") or weights.get("minClients") or 1))
+        if len(ml_engine.federated_aggregator.local_updates) >= min_clients:
+            aggregate = ml_engine.federated_aggregator.aggregate()
+            response["global_model_updated"] = aggregate is not None
+            response["aggregate"] = aggregate
+
+    return response
+
+
+@app.post("/ml/federated/rounds/start")
+def start_federated_round(payload: dict, _: models.User = Depends(auth.get_current_user)):
+    min_clients = payload.get("min_clients") or payload.get("minClients")
+    timeout_seconds = payload.get("timeout_seconds") or payload.get("timeoutSeconds")
+    round_id = payload.get("round_id") or payload.get("roundId")
+
+    round_state = ml_engine.federated_aggregator.start_round(
+        min_clients=min_clients,
+        timeout_seconds=timeout_seconds,
+        round_id=round_id,
+    )
+    return {"status": "started", "round": round_state}
+
+
+@app.get("/ml/federated/rounds/{round_id}")
+def get_federated_round(round_id: str, _: models.User = Depends(auth.get_current_user)):
+    round_state = ml_engine.federated_aggregator.get_round_status(round_id)
+    if not round_state:
+        raise HTTPException(status_code=404, detail="Round not found")
+    return {"round": round_state}
+
+
+@app.post("/ml/federated/reveal-mask")
+def reveal_federated_mask(payload: dict, current_user: models.User = Depends(auth.get_current_user)):
+    round_id = payload.get("round_id") or payload.get("roundId")
+    mask = payload.get("mask")
+    agent_id = str(
+        payload.get("agent_id")
+        or payload.get("agentId")
+        or current_user.id
+        or current_user.name
+    )
+
+    if not round_id:
+        raise HTTPException(status_code=400, detail="round_id is required")
+    if mask is None:
+        raise HTTPException(status_code=400, detail="mask is required")
+
+    try:
+        result = ml_engine.federated_aggregator.reveal_mask(round_id, agent_id, mask)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    response = {
+        "status": "accepted" if result.get("accepted") else "rejected",
+        "global_model_updated": bool(result.get("global_model_updated", False)),
+        "round": result.get("round"),
+    }
+    if result.get("aggregate") is not None:
+        response["aggregate"] = result.get("aggregate")
+    return response
+
+
+@app.get("/ml/federated/global-model")
+def get_federated_global_model(_: models.User = Depends(auth.get_current_user)):
+    latest = ml_engine.federated_aggregator.latest_secure_global
+    if not latest and os.path.exists(ml_engine.GLOBAL_MODEL_PATH):
+        try:
+            latest = joblib.load(ml_engine.GLOBAL_MODEL_PATH)
+        except Exception:
+            latest = None
+    return {"global_model": latest}
 
 # Playbook Routes
 @app.get("/playbooks", response_model=List[schemas.Playbook])

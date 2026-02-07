@@ -11,11 +11,14 @@ try:
     XGBOOST_AVAILABLE = True
 except Exception as e:
     XGBOOST_AVAILABLE = False
-    print(f"XGBoost not available: {e}. XGBoostRiskModel will be disabled.")
+    XGBOOST_IMPORT_ERROR = str(e)
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+
+if not globals().get("XGBOOST_AVAILABLE", False):
+    XGBOOST_IMPORT_ERROR = globals().get("XGBOOST_IMPORT_ERROR", "not installed")
 
 class BaseModel(ABC):
     def __init__(self, model_path="ml_artifacts"):
@@ -572,11 +575,22 @@ class BaseModel(ABC):
         return False
 
 class IsolationForestModel(BaseModel):
-    def __init__(self, model_path="ml_artifacts"):
+    def __init__(
+        self,
+        model_path="ml_artifacts",
+        n_estimators=300,
+        contamination=0.05,
+        max_samples="auto",
+        random_state=42,
+    ):
         super().__init__(model_path)
         self.model_name = "isolation_forest"
-        # Parameters can be tuned via grid search later
-        self.model = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
+        self.model = IsolationForest(
+            n_estimators=n_estimators,
+            contamination=contamination,
+            max_samples=max_samples,
+            random_state=random_state,
+        )
 
     def train(self, X, y=None):
         print("Training Isolation Forest...")
@@ -591,22 +605,35 @@ class IsolationForestModel(BaseModel):
         return self.model.decision_function(X)
 
 class XGBoostRiskModel(BaseModel):
-    def __init__(self, model_path="ml_artifacts"):
+    def __init__(
+        self,
+        model_path="ml_artifacts",
+        n_estimators=300,
+        learning_rate=0.05,
+        max_depth=6,
+        subsample=0.9,
+        colsample_bytree=0.9,
+    ):
         super().__init__(model_path)
         self.model_name = "xgboost_risk"
         if XGBOOST_AVAILABLE:
             self.model = xgb.XGBClassifier(
                 objective='multi:softprob', 
-                n_estimators=100, 
-                learning_rate=0.1, 
-                max_depth=5
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                subsample=subsample,
+                colsample_bytree=colsample_bytree,
+                eval_metric='mlogloss',
+                random_state=42,
             )
         else:
             self.model = None
 
     def train(self, X, y):
         if not self.model:
-            print("XGBoost not available. Skipping training.")
+            if os.getenv("SENTINEL_TESTING") != "1":
+                print(f"XGBoost not available ({XGBOOST_IMPORT_ERROR}). Skipping training.")
             return
         print("Training XGBoost Classifier...")
         # Ensure y is encoded 0..N
@@ -649,14 +676,15 @@ class AutoEncoder(nn.Module):
         return decoded
 
 class AutoEncoderModel(BaseModel):
-    def __init__(self, model_path="ml_artifacts", input_dim=4):
+    def __init__(self, model_path="ml_artifacts", input_dim=10, learning_rate=0.001):
         super().__init__(model_path)
         self.model_name = "autoencoder_torch"
         self.input_dim = input_dim
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = AutoEncoder(input_dim).to(self.device)
         self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.learning_rate = learning_rate
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.threshold = 0.1 # To be determined after training
 
     def train(self, X, y=None, epochs=20, batch_size=32):
@@ -665,7 +693,7 @@ class AutoEncoderModel(BaseModel):
         # Re-init model if dim changed (simple handling)
         if self.model.encoder[0].in_features != self.input_dim:
              self.model = AutoEncoder(self.input_dim).to(self.device)
-             self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+             self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         X_tensor = torch.tensor(X.values, dtype=torch.float32).to(self.device)
         dataset = TensorDataset(X_tensor)

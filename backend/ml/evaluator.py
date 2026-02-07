@@ -1,6 +1,7 @@
 
 import json
 import os
+import tempfile
 import pandas as pd
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, f1_score, precision_score, recall_score, accuracy_score, roc_curve, precision_recall_curve, auc
@@ -9,6 +10,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
+
+plt.switch_backend('Agg')
+
+if "MPLCONFIGDIR" not in os.environ:
+    os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp(prefix="mplconfig-")
 
 # Set academic style
 plt.style.use('seaborn-v0_8-whitegrid')
@@ -168,7 +174,9 @@ class ModelEvaluator:
         plt.xlabel('Recall')
         plt.ylabel('Precision')
         plt.title(f'Precision-Recall Curve - {model_name}')
-        plt.legend(loc="lower left")
+        handles, labels = plt.gca().get_legend_handles_labels()
+        if handles:
+            plt.legend(loc="lower left")
         plt.tight_layout()
         
         plot_path = os.path.join(self.artifact_dir, f"{model_name}_pr_curve.png")
