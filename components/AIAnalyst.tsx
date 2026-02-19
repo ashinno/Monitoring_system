@@ -243,6 +243,17 @@ CONFIDENTIAL - INTERNAL USE ONLY
                                         ))}
                                     </div>
                                 )}
+
+                                {msg.llmAssessment && (
+                                    <div className="mt-3 pt-3 border-t border-slate-700">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">LLM Assessment</p>
+                                        <div className="text-[11px] text-slate-300 space-y-1">
+                                            <div>Risk: <span className="font-mono">{msg.llmAssessment.riskLevel}</span></div>
+                                            <div>Threat: <span className="font-mono">{msg.llmAssessment.threatType}</span></div>
+                                            <div>Confidence: <span className="font-mono">{(msg.llmAssessment.confidence * 100).toFixed(1)}%</span></div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

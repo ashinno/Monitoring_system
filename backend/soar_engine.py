@@ -6,6 +6,8 @@ import schemas
 import database
 import notifications
 import traceback
+from collections import defaultdict, deque
+import time
 
 class SOAREngine:
     """
@@ -19,7 +21,80 @@ class SOAREngine:
     """
 
     def __init__(self):
-        pass
+        self._rate_windows = defaultdict(deque)
+
+    def _extract_confidence(self, log: models.Log) -> float:
+        text = (log.activity_summary or "").strip()
+        if not text:
+            return 0.0
+        try:
+            import json
+
+            payload = json.loads(text)
+            value = payload.get("confidence")
+            if value is None:
+                return 0.0
+            return max(0.0, min(1.0, float(value)))
+        except Exception:
+            return 0.0
+
+    def _target_for_action(self, playbook: models.Playbook, log: models.Log) -> str:
+        if playbook.action_target:
+            return playbook.action_target
+        if playbook.action_type == "BLOCK_IP":
+            return log.ip_address or ""
+        return log.user or ""
+
+    def _scope_match(self, scope: str, log: models.Log) -> bool:
+        if not scope or scope == "global":
+            return True
+        if scope == "internal_only":
+            return str(log.location or "").lower() in {"internal", "local", "agent-monitored-device"}
+        return True
+
+    def _approval_required(self, playbook: models.Playbook, confidence: float) -> bool:
+        if not playbook.requires_approval:
+            return False
+        # If confidence is exceptionally high, we allow automatic execution.
+        return confidence < 0.98
+
+    def _allow_rate(self, playbook: models.Playbook, target: str) -> bool:
+        limit = max(1, int(playbook.rate_limit_count or 1))
+        window = max(1, int(playbook.rate_limit_window_seconds or 1))
+        now = time.time()
+        key = f"{playbook.id}:{target or '-'}"
+        dq = self._rate_windows[key]
+        while dq and dq[0] <= now - window:
+            dq.popleft()
+        if len(dq) >= limit:
+            return False
+        dq.append(now)
+        return True
+
+    def _audit_action(
+        self,
+        db: Session,
+        playbook: models.Playbook,
+        log: models.Log,
+        target: str,
+        status: str,
+        reason: str,
+        confidence: float,
+    ):
+        audit = models.PlaybookActionAudit(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.now().isoformat(),
+            playbook_id=playbook.id,
+            source_log_id=log.id,
+            action_type=playbook.action_type,
+            target=target,
+            status=status,
+            reason=reason,
+            risk_level=log.risk_level,
+            confidence=confidence,
+        )
+        db.add(audit)
+        db.commit()
 
     def run_automation(self, log_id: str):
         """
@@ -49,8 +124,68 @@ class SOAREngine:
         for playbook in playbooks:
             try:
                 if self._check_trigger(playbook, log):
+                    confidence = self._extract_confidence(log)
+                    target = self._target_for_action(playbook, log)
+
+                    if not self._scope_match(playbook.scope, log):
+                        self._audit_action(
+                            db,
+                            playbook,
+                            log,
+                            target,
+                            "skipped",
+                            f"scope_mismatch:{playbook.scope}",
+                            confidence,
+                        )
+                        continue
+
+                    if confidence < float(playbook.min_confidence or 0.0):
+                        self._audit_action(
+                            db,
+                            playbook,
+                            log,
+                            target,
+                            "skipped",
+                            f"confidence_below_threshold:{confidence:.2f}",
+                            confidence,
+                        )
+                        continue
+
+                    if self._approval_required(playbook, confidence):
+                        self._audit_action(
+                            db,
+                            playbook,
+                            log,
+                            target,
+                            "pending_approval",
+                            "manual_approval_required",
+                            confidence,
+                        )
+                        continue
+
+                    if not self._allow_rate(playbook, target):
+                        self._audit_action(
+                            db,
+                            playbook,
+                            log,
+                            target,
+                            "rate_limited",
+                            "rate_limit_exceeded",
+                            confidence,
+                        )
+                        continue
+
                     print(f"[SOAR] Playbook '{playbook.name}' triggered by Log {log.id}")
                     self._execute_action(playbook, log, db)
+                    self._audit_action(
+                        db,
+                        playbook,
+                        log,
+                        target,
+                        "executed",
+                        "executed_successfully",
+                        confidence,
+                    )
             except Exception as e:
                 print(f"[SOAR] Error processing playbook '{playbook.name}': {e}")
                 # Continue to next playbook - Graceful degradation
@@ -66,6 +201,14 @@ class SOAREngine:
         # e.g. "riskLevel" -> "risk_level"
         if field_name == "riskLevel":
             log_value = log.risk_level
+        elif field_name == "llmRiskLevel":
+            try:
+                import json
+
+                payload = json.loads(log.activity_summary or "{}")
+                log_value = payload.get("risk_level", "")
+            except Exception:
+                log_value = None
         elif field_name == "activityType":
             log_value = log.activity_type
         elif field_name == "description":

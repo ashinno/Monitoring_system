@@ -2,6 +2,8 @@ import os
 
 class Config:
     BASE_URL = os.getenv("SERVER_URL", "http://localhost:8000")
+    INGEST_PATH = os.getenv("AGENT_INGEST_PATH", "/api/logs")
+    AGENT_API_KEY = os.getenv("AGENT_API_KEY", "")
     USERNAME = os.getenv("AGENT_USER", "admin")
     PASSWORD = os.getenv("AGENT_PASSWORD", "admin")
     # In a real scenario, the encryption key should be securely provisioned.

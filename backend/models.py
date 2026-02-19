@@ -42,6 +42,26 @@ class Playbook(Base):
     trigger_value = Column(String)
     action_type = Column(String)
     action_target = Column(String, nullable=True)
+    min_confidence = Column(Float, default=0.0)
+    requires_approval = Column(Boolean, default=False)
+    rate_limit_count = Column(Integer, default=5)
+    rate_limit_window_seconds = Column(Integer, default=300)
+    scope = Column(String, default="global")
+
+
+class PlaybookActionAudit(Base):
+    __tablename__ = "playbook_action_audit"
+
+    id = Column(String, primary_key=True, index=True)
+    timestamp = Column(String, default=lambda: datetime.datetime.now().isoformat(), index=True)
+    playbook_id = Column(String, index=True)
+    source_log_id = Column(String, index=True)
+    action_type = Column(String)
+    target = Column(String, nullable=True)
+    status = Column(String)
+    reason = Column(String)
+    risk_level = Column(String, nullable=True)
+    confidence = Column(Float, nullable=True)
 
 class Settings(Base):
     __tablename__ = "settings"

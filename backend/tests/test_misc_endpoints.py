@@ -42,6 +42,47 @@ def test_chat_endpoint_returns_structured_response(client, auth_headers, backend
     assert body["text"] == "Hello"
 
 
+def test_chat_endpoint_validates_llm_assessment(client, auth_headers, backend_app_module, monkeypatch):
+    backend_app_module.llm_response_cache._items.clear()
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "response": json.dumps(
+                    {
+                        "text": "Assessment",
+                        "actions": [],
+                        "llm_assessment": {
+                            "risk_level": "SUSPICIOUS",
+                            "threat_type": "c2_beaconing",
+                            "confidence": 0.88,
+                            "reasoning": "periodic network pattern",
+                            "recommended_actions": ["block_ip", "collect_forensics"],
+                        },
+                    }
+                )
+            }
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(backend_app_module.httpx, "AsyncClient", lambda: FakeClient())
+
+    res = client.post("/chat", json={"message": "hi", "context": []}, headers=auth_headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["llmAssessment"]["risk_level"] == "SUSPICIOUS"
+
+
 def test_network_traffic_create_read_and_analyze(client, auth_headers, backend_app_module, monkeypatch):
     monkeypatch.setattr(backend_app_module.analysis, "analyze_network_traffic", lambda data: {"summary": "ok", "anomaly_score": 0.0, "anomalies_detected": 0, "details": []})
     monkeypatch.setattr(backend_app_module.ml_engine, "predict_anomaly", lambda _: 1)
@@ -164,3 +205,17 @@ def test_soar_actions_create_logs_and_reset_password(client, auth_headers, backe
 
     logs = client.get("/logs", headers=auth_headers).json()
     assert any(l["activityType"] == "SOAR_ACTION" for l in logs)
+
+
+def test_agent_logs_endpoint_accepts_without_key_by_default(client):
+    payload = {
+        "id": str(uuid.uuid4()),
+        "timestamp": datetime.now().isoformat(),
+        "user": "agent-default",
+        "activityType": "SYSTEM",
+        "riskLevel": "INFO",
+        "description": "test",
+        "details": "test",
+    }
+    res = client.post("/api/logs", json=payload)
+    assert res.status_code == 200

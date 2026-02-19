@@ -201,8 +201,19 @@ def test_system_metrics_endpoints(client, auth_headers, backend_app_module):
     assert isinstance(res.json(), list)
 
 
-def test_simulation_routes(client, auth_headers, backend_app_module, monkeypatch):
-    class SimulatorStub:
+def test_health_and_ready_endpoints(client, auth_headers):
+    health = client.get("/health", headers=auth_headers)
+    assert health.status_code == 200
+    payload = health.json()
+    assert payload["status"] in {"ok", "degraded"}
+    assert "components" in payload
+
+    ready = client.get("/ready", headers=auth_headers)
+    assert ready.status_code in {200, 503}
+
+
+def test_interception_routes(client, auth_headers, backend_app_module, monkeypatch):
+    class InterceptorStub:
         def __init__(self):
             self.started = False
 
@@ -217,32 +228,36 @@ def test_simulation_routes(client, auth_headers, backend_app_module, monkeypatch
                 "is_running": self.started,
                 "config": {
                     "is_running": self.started,
-                    "traffic_type": "HTTP",
-                    "volume": "low",
-                    "pattern": "steady",
-                    "packet_size_range": [500, 1500],
-                    "error_rate": 0.0,
-                    "latency": 0,
-                    "attack_type": None,
+                    "interface": None,
+                    "protocols": ["TCP", "UDP"],
+                    "include_loopback": False,
+                    "poll_interval_ms": 1000,
                 },
-                "stats": {"packets_generated": 0, "bytes_generated": 0, "errors_simulated": 0},
+                "stats": {"packets_intercepted": 0, "bytes_intercepted": 0, "errors": 0},
             }
 
-    monkeypatch.setattr(backend_app_module, "simulator", SimulatorStub())
+        def get_available_interfaces(self):
+            return ["en0", "lo0"]
+
+    monkeypatch.setattr(backend_app_module, "interceptor", InterceptorStub())
 
     res = client.post(
-        "/simulation/start",
-        json={"trafficType": "HTTP", "volume": "low", "pattern": "steady", "packetSizeRange": [500, 1500], "errorRate": 0.0, "latency": 0},
+        "/interception/start",
+        json={"protocols": ["TCP", "UDP"], "includeLoopback": False, "pollIntervalMs": 1000},
         headers=auth_headers,
     )
     assert res.status_code == 200
     assert res.json()["isRunning"] is True
 
-    res = client.get("/simulation/status", headers=auth_headers)
+    res = client.get("/interception/status", headers=auth_headers)
     assert res.status_code == 200
     assert res.json()["isRunning"] is True
 
-    res = client.post("/simulation/stop", headers=auth_headers)
+    res = client.get("/interception/interfaces", headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json() == ["en0", "lo0"]
+
+    res = client.post("/interception/stop", headers=auth_headers)
     assert res.status_code == 200
     assert res.json()["isRunning"] is False
 

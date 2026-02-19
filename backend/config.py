@@ -35,6 +35,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     CORS_ALLOWED_ORIGINS: List[str] = _parse_origins(os.getenv("CORS_ALLOWED_ORIGINS", ""))
     ENFORCE_STRICT_SECURITY: bool = _as_bool(os.getenv("ENFORCE_STRICT_SECURITY"), False)
+    AGENT_API_KEY: str = os.getenv("AGENT_API_KEY", "")
     DEFAULT_ADMIN_ID: str = os.getenv("DEFAULT_ADMIN_ID", "admin")
     DEFAULT_ADMIN_NAME: str = os.getenv("DEFAULT_ADMIN_NAME", "Admin User")
     DEFAULT_ADMIN_PASSWORD: str = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin")
@@ -45,6 +46,10 @@ class Settings:
     # Celery / Redis
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+    # LLM
+    LLM_CACHE_MAX_SIZE: int = int(os.getenv("LLM_CACHE_MAX_SIZE", "256"))
+    LLM_CACHE_TTL_SECONDS: int = int(os.getenv("LLM_CACHE_TTL_SECONDS", "300"))
 
 settings = Settings()
 

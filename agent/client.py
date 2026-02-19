@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from config import Config
 from encryption import Encryptor
+from offline_queue import OfflineQueue
 try:
     from local_trainer import local_trainer
 except Exception:
@@ -108,6 +109,7 @@ class SentinelAgent:
         self.settings = {}
         self.warning_shown = False
         self.trainer = local_trainer if local_trainer else _NullLocalTrainer()
+        self.offline_queue = OfflineQueue()
 
     def _get_ip(self):
         try:
@@ -204,11 +206,16 @@ class SentinelAgent:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
-        
+        if Config.AGENT_API_KEY:
+            headers["X-Agent-Api-Key"] = Config.AGENT_API_KEY
+
+        self._flush_offline_queue(headers)
+
         try:
-            response = requests.post(f"{self.base_url}/logs", json=log_data, headers=headers)
+            response = requests.post(f"{self.base_url}{Config.INGEST_PATH}", json=log_data, headers=headers)
             if response.status_code != 200:
                 print(f"Failed to send log: {response.text}")
+                self.offline_queue.enqueue(log_data)
             else:
                 print(f"Sent {activity_type} log.")
                 try:
@@ -220,6 +227,19 @@ class SentinelAgent:
                     pass
         except Exception as e:
             print(f"Error sending log: {e}")
+            self.offline_queue.enqueue(log_data)
+
+    def _flush_offline_queue(self, headers):
+        due = self.offline_queue.get_due(limit=20)
+        for row_id, payload, retries in due:
+            try:
+                response = requests.post(f"{self.base_url}{Config.INGEST_PATH}", json=payload, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    self.offline_queue.mark_success(row_id)
+                else:
+                    self.offline_queue.mark_failure(row_id, retries)
+            except Exception:
+                self.offline_queue.mark_failure(row_id, retries)
 
     def _fetch_or_start_fl_round(self, headers):
         round_id = getattr(self.trainer, "last_round_id", None)
@@ -387,6 +407,7 @@ class SentinelAgent:
         print("Starting monitoring agent...")
         self.fetch_settings()
         self.keylogger.start()
+        self.network_monitor.start()
         
         loops = 0
         try:

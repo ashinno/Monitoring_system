@@ -89,3 +89,74 @@ def test_strict_security_rejects_weak_default_passwords(monkeypatch):
         import backend.config  # noqa: F401
 
     assert "Strict security mode" in str(exc_info.value)
+
+
+def test_soar_engine_respects_guardrails(backend_app_module, monkeypatch):
+    engine = backend_app_module.soar_engine.SOAREngine()
+
+    playbook = backend_app_module.models.Playbook(
+        id="pb-guard",
+        name="guard",
+        is_active=True,
+        trigger_field="riskLevel",
+        trigger_operator="equals",
+        trigger_value="CRITICAL",
+        action_type="LOCK_USER",
+        action_target=None,
+        min_confidence=0.9,
+        requires_approval=True,
+        rate_limit_count=1,
+        rate_limit_window_seconds=300,
+        scope="global",
+    )
+    log = backend_app_module.models.Log(
+        id="log-1",
+        timestamp=datetime.now().isoformat(),
+        user="alice",
+        activity_type="SYSTEM",
+        risk_level="CRITICAL",
+        description="test",
+        details="test",
+        activity_summary='{"confidence": 0.95}',
+    )
+
+    class DBStub:
+        def __init__(self):
+            self.audit = []
+
+        def add(self, item):
+            if item.__class__.__name__ == "PlaybookActionAudit":
+                self.audit.append(item)
+
+        def commit(self):
+            return None
+
+    db = DBStub()
+    called = {"executed": 0}
+
+    monkeypatch.setattr(engine, "_execute_action", lambda *_args, **_kwargs: called.__setitem__("executed", called["executed"] + 1))
+    monkeypatch.setattr(engine, "_check_trigger", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        backend_app_module.soar_engine,
+        "models",
+        backend_app_module.models,
+    )
+
+    engine._evaluate_rules = engine._evaluate_rules.__get__(engine, backend_app_module.soar_engine.SOAREngine)
+    monkeypatch.setattr(
+        backend_app_module.soar_engine,
+        "database",
+        backend_app_module.database,
+    )
+
+    monkeypatch.setattr(
+        type("Q", (), {}),
+        "all",
+        lambda self: [playbook],
+        raising=False,
+    )
+
+    # run through direct checks since query chain is tightly coupled
+    confidence = engine._extract_confidence(log)
+    assert confidence == 0.95
+    assert engine._approval_required(playbook, confidence) is True

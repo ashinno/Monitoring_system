@@ -8,7 +8,7 @@ import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult } from '../types'
 import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
 import NetworkGraph from './NetworkGraph';
-import TrafficSimulator from './TrafficSimulator';
+import TrafficInterceptor from './TrafficSimulator';
 import SystemMetrics from './SystemMetrics';
 import KeymapHeatmap from './KeymapHeatmap';
 import { io } from 'socket.io-client';
@@ -339,7 +339,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
 
             {/* Network Analysis Module */}
             <NetworkGraph logs={logs} />
-            <TrafficSimulator />
+            <TrafficInterceptor />
             <NetworkAnalysis />
             <KeymapHeatmap />
         </div>

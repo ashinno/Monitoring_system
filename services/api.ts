@@ -34,9 +34,10 @@ export const chatWithAI = (message: string, context: any[]) => API.post('/chat',
 export const exportData = (format: string, compress: boolean, startDate?: string, endDate?: string) => 
     API.get(`/api/reports/export?format=${format}&compress=${compress}${startDate ? `&start_date=${startDate}` : ''}${endDate ? `&end_date=${endDate}` : ''}`, { responseType: 'blob' });
 
-export const startSimulation = (config: any) => API.post('/simulation/start', config);
-export const stopSimulation = () => API.post('/simulation/stop');
-export const getSimulationStatus = () => API.get('/simulation/status');
+export const startInterception = (config: any) => API.post('/interception/start', config);
+export const stopInterception = () => API.post('/interception/stop');
+export const getInterceptionStatus = () => API.get('/interception/status');
+export const getInterceptionInterfaces = () => API.get('/interception/interfaces');
 
 export const getSimulationProfiles = () => API.get('/simulation/profiles');
 export const createSimulationProfile = (profile: any) => API.post('/simulation/profiles', profile);

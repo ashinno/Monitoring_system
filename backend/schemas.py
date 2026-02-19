@@ -68,6 +68,11 @@ class PlaybookBase(BaseSchema):
     is_active: bool
     trigger: PlaybookTrigger
     action: PlaybookAction
+    min_confidence: float = 0.0
+    requires_approval: bool = False
+    rate_limit_count: int = 5
+    rate_limit_window_seconds: int = 300
+    scope: str = "global"
 
 class PlaybookCreate(PlaybookBase):
     pass
@@ -82,6 +87,7 @@ class AnalysisResult(BaseSchema):
     recommendations: List[str]
     flagged_logs: List[str]
     explanations: Optional[Dict[str, Dict[str, float]]] = None
+    llm_assessment: Optional[Dict[str, Any]] = None
 
 # --- Token Schema ---
 class Token(BaseSchema):
@@ -169,6 +175,27 @@ class NetworkAnalysisResult(BaseSchema):
     anomalies_detected: int
     details: List[NetworkAnalysisDetail]
 
+
+# --- Traffic Interception Schemas ---
+class InterceptionConfig(BaseSchema):
+    is_running: bool = False
+    interface: Optional[str] = None
+    protocols: List[str] = ["TCP", "UDP"]
+    include_loopback: bool = False
+    poll_interval_ms: int = 1000
+
+
+class InterceptionStats(BaseSchema):
+    packets_intercepted: int
+    bytes_intercepted: int
+    errors: int
+
+
+class InterceptionStatus(BaseSchema):
+    is_running: bool
+    config: InterceptionConfig
+    stats: InterceptionStats
+
 # --- Simulation Schemas ---
 class SimulationConfig(BaseSchema):
     is_running: bool = False
@@ -255,3 +282,14 @@ class ChatResponse(BaseSchema):
     role: str
     text: str
     actions: Optional[List[ActionCard]] = None
+    llm_assessment: Optional[Dict[str, Any]] = None
+
+
+class HealthComponent(BaseSchema):
+    status: str
+    detail: Optional[str] = None
+
+
+class HealthStatus(BaseSchema):
+    status: str
+    components: Dict[str, HealthComponent]

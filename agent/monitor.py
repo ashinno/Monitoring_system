@@ -117,10 +117,8 @@ class ClipboardMonitor:
         if content_hash == self.last_hash:
             return None
         self.last_hash = content_hash
-        preview = content[: self.max_length]
         return {
             "length": len(content),
-            "preview": preview,
             "hash": content_hash
         }
 

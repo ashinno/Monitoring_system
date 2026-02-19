@@ -19,6 +19,24 @@ import models, schemas, auth, analysis, database, ml_engine, prediction_engine, 
 import agent_manager
 import tasks # Explicit import for Celery tasks
 from config import settings
+from security.agent_auth import verify_agent_api_key
+from llm.sanitizer import sanitize_context_items, sanitize_text
+from llm.cache import LLMResponseCache
+from llm.contracts import validate_assessment
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
 
 # --- DB Setup ---
 models.Base.metadata.create_all(bind=database.engine)
@@ -165,12 +183,51 @@ def ensure_settings_schema():
     columns = {
         "monitor_clipboard": "BOOLEAN DEFAULT 0",
         "monitor_usb": "BOOLEAN DEFAULT 0",
-        "monitor_camera": "BOOLEAN DEFAULT 0"
+        "monitor_camera": "BOOLEAN DEFAULT 0",
     }
     with database.engine.begin() as conn:
         for name, ddl in columns.items():
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE settings ADD COLUMN {name} {ddl}"))
+
+    playbook_columns = {
+        "min_confidence": "FLOAT DEFAULT 0.0",
+        "requires_approval": "BOOLEAN DEFAULT 0",
+        "rate_limit_count": "INTEGER DEFAULT 5",
+        "rate_limit_window_seconds": "INTEGER DEFAULT 300",
+        "scope": "TEXT DEFAULT 'global'",
+    }
+    existing_playbook = {col["name"] for col in inspector.get_columns("playbooks")} if "playbooks" in inspector.get_table_names() else set()
+    with database.engine.begin() as conn:
+        for name, ddl in playbook_columns.items():
+            if name not in existing_playbook:
+                conn.execute(text(f"ALTER TABLE playbooks ADD COLUMN {name} {ddl}"))
+
+
+def ensure_audit_table():
+    inspector = inspect(database.engine)
+    if "playbook_action_audit" in inspector.get_table_names():
+        return
+
+    with database.engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE playbook_action_audit (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT,
+                    playbook_id TEXT,
+                    source_log_id TEXT,
+                    action_type TEXT,
+                    target TEXT,
+                    status TEXT,
+                    reason TEXT,
+                    risk_level TEXT,
+                    confidence FLOAT
+                )
+                """
+            )
+        )
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -178,6 +235,7 @@ async def lifespan(_: FastAPI):
     disable_background = os.getenv("SENTINEL_DISABLE_BACKGROUND_TASKS") == "1" or os.getenv("SENTINEL_TESTING") == "1"
     try:
         ensure_settings_schema()
+        ensure_audit_table()
         if not db.query(models.User).first():
             print("Seeding database with default users...")
             # Admin
@@ -248,6 +306,10 @@ async def lifespan(_: FastAPI):
         db.close()
 
 app = FastAPI(title="Sentinel AI Backend", lifespan=lifespan)
+llm_response_cache = LLMResponseCache(
+    max_size=settings.LLM_CACHE_MAX_SIZE,
+    ttl_seconds=settings.LLM_CACHE_TTL_SECONDS,
+)
 
 screenshots_dir = os.path.join(os.path.dirname(__file__), "screenshots")
 os.makedirs(screenshots_dir, exist_ok=True)
@@ -530,6 +592,16 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
     
     return db_log
 
+
+@app.post("/api/logs", response_model=schemas.Log)
+async def create_agent_log(
+    log: schemas.LogCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_agent_api_key),
+):
+    return await create_log(log, background_tasks, db)
+
 @app.post("/ml/train")
 def train_anomaly_model(payload: dict = None, db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
     config = payload or {}
@@ -661,7 +733,12 @@ def read_playbooks(db: Session = Depends(get_db), _: models.User = Depends(auth.
             "action": {
                 "type": p.action_type,
                 "target": p.action_target
-            }
+            },
+            "min_confidence": _safe_float(p.min_confidence, 0.0),
+            "requires_approval": bool(p.requires_approval),
+            "rate_limit_count": _safe_int(p.rate_limit_count, 5),
+            "rate_limit_window_seconds": _safe_int(p.rate_limit_window_seconds, 300),
+            "scope": p.scope or "global",
         })
     return results
 
@@ -676,7 +753,12 @@ def create_playbook(playbook: schemas.PlaybookCreate, db: Session = Depends(get_
         trigger_operator=playbook.trigger.operator,
         trigger_value=playbook.trigger.value,
         action_type=playbook.action.type,
-        action_target=playbook.action.target
+        action_target=playbook.action.target,
+        min_confidence=playbook.min_confidence,
+        requires_approval=playbook.requires_approval,
+        rate_limit_count=playbook.rate_limit_count,
+        rate_limit_window_seconds=playbook.rate_limit_window_seconds,
+        scope=playbook.scope,
     )
     db.add(db_playbook)
     db.commit()
@@ -693,7 +775,12 @@ def create_playbook(playbook: schemas.PlaybookCreate, db: Session = Depends(get_
         "action": {
             "type": db_playbook.action_type,
             "target": db_playbook.action_target
-        }
+        },
+        "min_confidence": _safe_float(db_playbook.min_confidence, 0.0),
+        "requires_approval": bool(db_playbook.requires_approval),
+        "rate_limit_count": _safe_int(db_playbook.rate_limit_count, 5),
+        "rate_limit_window_seconds": _safe_int(db_playbook.rate_limit_window_seconds, 300),
+        "scope": db_playbook.scope or "global",
     }
 
 
@@ -717,7 +804,12 @@ def toggle_playbook(playbook_id: str, db: Session = Depends(get_db), _: models.U
         "action": {
             "type": db_playbook.action_type,
             "target": db_playbook.action_target
-        }
+        },
+        "min_confidence": _safe_float(db_playbook.min_confidence, 0.0),
+        "requires_approval": bool(db_playbook.requires_approval),
+        "rate_limit_count": _safe_int(db_playbook.rate_limit_count, 5),
+        "rate_limit_window_seconds": _safe_int(db_playbook.rate_limit_window_seconds, 300),
+        "scope": db_playbook.scope or "global",
     }
 
 
@@ -763,16 +855,19 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
     # Updated default model to qwen3:8b as requested
     MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
     
-    # Serialize context safely
-    try:
-        context_str = json.dumps(request.context[:10], default=str)
-    except:
-        context_str = "[]"
+    safe_message = sanitize_text(request.message, max_length=1200)
+    safe_context_items = sanitize_context_items(request.context, max_items=10)
+    context_str = json.dumps(safe_context_items, default=str)
+
+    cache_key = f"chat::{safe_message}::{context_str}"
+    cached = llm_response_cache.get(cache_key)
+    if cached:
+        return schemas.ChatResponse.model_validate(cached)
     
     prompt = f"""
     You are Sentinel AI, a cybersecurity expert.
     Context Logs: {context_str}
-    User Question: {request.message}
+    User Question: {safe_message}
     
     Analyze the question and logs. Provide a helpful response and suggest actions if needed.
     
@@ -794,6 +889,15 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
         ]
     }}
     If no actions are needed, set "actions" to [].
+
+    Also include this optional object when applicable:
+    "llm_assessment": {{
+      "risk_level": "BENIGN|SUSPICIOUS|MALICIOUS",
+      "threat_type": "string",
+      "confidence": 0.0,
+      "reasoning": "short justification",
+      "recommended_actions": ["block_ip", "isolate_host", "reset_password"]
+    }}
     
     IMPORTANT: If your text response recommends taking a specific action (like blocking an IP or resetting a password), YOU MUST include that action in the 'actions' array so the user can click it.
     """
@@ -809,37 +913,51 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
                     "format": "json"
                 }, timeout=60.0) # Longer timeout for local inference
             except httpx.ConnectError:
-                 return schemas.ChatResponse(
+                response_obj = schemas.ChatResponse(
                     role="ai",
                     text=f"[System] Failed to connect to Ollama (Local AI). Please ensure 'ollama serve' is running and '{MODEL}' model is pulled.",
                     actions=[]
                 )
+                llm_response_cache.set(cache_key, response_obj.model_dump())
+                return response_obj
 
             if response.status_code != 200:
                 print(f"Ollama Error: {response.text}")
-                return schemas.ChatResponse(
+                response_obj = schemas.ChatResponse(
                     role="ai",
                     text=f"Error communicating with AI Engine ({response.status_code}).",
                     actions=[]
                 )
+                llm_response_cache.set(cache_key, response_obj.model_dump())
+                return response_obj
                 
             result = response.json()
             # Ollama returns 'response' field
             ai_content = json.loads(result['response'])
             
-            return schemas.ChatResponse(
+            llm_assessment = ai_content.get("llm_assessment")
+            if isinstance(llm_assessment, dict):
+                parsed, _err = validate_assessment(llm_assessment)
+                llm_assessment = parsed.model_dump() if parsed else None
+
+            response_obj = schemas.ChatResponse(
                 role="ai",
                 text=ai_content.get('text', 'No text provided.'),
-                actions=ai_content.get('actions', [])
+                actions=ai_content.get('actions', []),
+                llm_assessment=llm_assessment,
             )
+            llm_response_cache.set(cache_key, response_obj.model_dump())
+            return response_obj
             
     except Exception as e:
         print(f"AI Chat Error: {e}")
-        return schemas.ChatResponse(
+        response_obj = schemas.ChatResponse(
             role="ai",
             text="[System] Internal Error processing AI request.",
             actions=[]
         )
+        llm_response_cache.set(cache_key, response_obj.model_dump())
+        return response_obj
 
 @app.post("/analyze", response_model=schemas.AnalysisResult)
 async def analyze_security_logs(db: Session = Depends(get_db), _: models.User = Depends(auth.get_current_user)):
@@ -902,12 +1020,63 @@ async def analyze_security_logs(db: Session = Depends(get_db), _: models.User = 
                     if ai_data.get('ai_recommendations'):
                         # Prepend AI recommendations
                         result['recommendations'] = ai_data['ai_recommendations'] + result['recommendations']
+
+                    candidate_assessment = {
+                        "risk_level": "MALICIOUS" if result.get("threat_score", 0) >= 70 else (
+                            "SUSPICIOUS" if result.get("threat_score", 0) >= 30 else "BENIGN"
+                        ),
+                        "threat_type": "multi_event_anomaly",
+                        "confidence": min(1.0, max(0.0, float(result.get("threat_score", 0)) / 100.0)),
+                        "reasoning": sanitize_text(ai_data.get("ai_summary") or result.get("summary") or ""),
+                        "recommended_actions": [
+                            "investigate_process_tree",
+                            "collect_forensics",
+                        ],
+                    }
+                    parsed_assessment, _err = validate_assessment(candidate_assessment)
+                    if parsed_assessment:
+                        result["llm_assessment"] = parsed_assessment.model_dump()
                         
         except Exception as e:
             print(f"AI Enhanced Analysis Failed: {e}")
             # Fallback to heuristic result (already calculated)
 
     return result
+
+
+@app.get("/health", response_model=schemas.HealthStatus)
+def health_status(db: Session = Depends(get_db)):
+    components = {
+        "api": {"status": "ok", "detail": "running"},
+        "database": {"status": "ok", "detail": "connected"},
+        "redis": {"status": "unknown", "detail": "not checked"},
+        "llm": {"status": "unknown", "detail": "not checked"},
+    }
+
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        components["database"] = {"status": "degraded", "detail": str(exc)}
+
+    llm_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    if llm_url:
+        components["llm"]["detail"] = llm_url
+
+    status_value = "ok"
+    if any(c["status"] == "degraded" for c in components.values()):
+        status_value = "degraded"
+
+    return {"status": status_value, "components": components}
+
+
+@app.get("/ready", response_model=schemas.HealthStatus)
+def readiness_status(db: Session = Depends(get_db)):
+    response = health_status(db)
+    status_value = response.get("status") if isinstance(response, dict) else getattr(response, "status", "degraded")
+    if status_value != "ok":
+        detail = response if isinstance(response, dict) else response.model_dump()
+        raise HTTPException(status_code=503, detail=detail)
+    return response
 
 @app.get("/predict", response_model=schemas.PredictionResult)
 def predict_next_action(current_activity: str, _: models.User = Depends(auth.get_current_user)):
@@ -947,22 +1116,33 @@ def analyze_network_traffic_endpoint(db: Session = Depends(get_db), _: models.Us
     result = analysis.analyze_network_traffic(traffic_data)
     return result
 
-# --- Simulation Routes ---
-from simulation import simulator
+# --- Traffic Interception Routes ---
+from interception import interceptor
 
-@app.post("/simulation/start", response_model=schemas.SimulationStatus)
-def start_simulation(config: schemas.SimulationConfig, _: models.User = Depends(auth.get_current_user)):
-    simulator.start(config)
-    return simulator.get_status()
 
-@app.post("/simulation/stop", response_model=schemas.SimulationStatus)
-def stop_simulation(_: models.User = Depends(auth.get_current_user)):
-    simulator.stop()
-    return simulator.get_status()
+@app.post("/interception/start", response_model=schemas.InterceptionStatus)
+def start_interception(config: schemas.InterceptionConfig, _: models.User = Depends(auth.get_current_user)):
+    try:
+        interceptor.start(config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return interceptor.get_status()
 
-@app.get("/simulation/status", response_model=schemas.SimulationStatus)
-def get_simulation_status(_: models.User = Depends(auth.get_current_user)):
-    return simulator.get_status()
+
+@app.post("/interception/stop", response_model=schemas.InterceptionStatus)
+def stop_interception(_: models.User = Depends(auth.get_current_user)):
+    interceptor.stop()
+    return interceptor.get_status()
+
+
+@app.get("/interception/status", response_model=schemas.InterceptionStatus)
+def get_interception_status(_: models.User = Depends(auth.get_current_user)):
+    return interceptor.get_status()
+
+
+@app.get("/interception/interfaces", response_model=List[str])
+def list_interception_interfaces(_: models.User = Depends(auth.get_current_user)):
+    return interceptor.get_available_interfaces()
 
 # --- Simulation Profile Routes ---
 @app.post("/simulation/profiles", response_model=schemas.SimulationProfile)

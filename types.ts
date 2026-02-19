@@ -51,6 +51,13 @@ export interface AnalysisResult {
     threatScore: number; // 0-100
     recommendations: string[];
     flaggedLogs: string[];
+    llmAssessment?: {
+        riskLevel: 'BENIGN' | 'SUSPICIOUS' | 'MALICIOUS';
+        threatType: string;
+        confidence: number;
+        reasoning: string;
+        recommendedActions: string[];
+    };
 }
 
 export type ViewState = 'DASHBOARD' | 'LIVE_MONITOR' | 'AI_ANALYST' | 'SETTINGS' | 'USERS' | 'AUTOMATION' | 'KEYLOGGER';
@@ -129,4 +136,11 @@ export interface ChatMessage {
     role: 'user' | 'ai';
     text: string;
     actions?: ActionCard[];
+    llmAssessment?: {
+        riskLevel: 'BENIGN' | 'SUSPICIOUS' | 'MALICIOUS';
+        threatType: string;
+        confidence: number;
+        reasoning: string;
+        recommendedActions: string[];
+    };
 }

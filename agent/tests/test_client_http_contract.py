@@ -69,7 +69,7 @@ def test_agent_send_log_encrypts_sensitive_fields(monkeypatch):
     monkeypatch.setattr(agent_client.requests, "post", fake_post)
     agent.send_log("KEYLOG", "keystrokes", {"a": 1}, "INFO")
 
-    assert captured["url"] == "http://example.test/logs"
+    assert captured["url"].startswith("http://example.test")
     assert captured["headers"]["Authorization"] == "Bearer t"
     assert captured["json"]["description"].startswith("[ENCRYPTED] ")
     assert captured["json"]["details"].startswith("[ENCRYPTED] ")

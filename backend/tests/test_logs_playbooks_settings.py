@@ -128,6 +128,31 @@ def test_playbooks_crud(client, auth_headers):
     assert res.status_code == 404
 
 
+def test_playbook_guardrail_fields_roundtrip(client, auth_headers):
+    pb_id = f"pb-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "id": pb_id,
+        "name": "Guardrail Rule",
+        "isActive": True,
+        "trigger": {"field": "riskLevel", "operator": "equals", "value": "HIGH"},
+        "action": {"type": "LOCK_USER", "target": None},
+        "minConfidence": 0.75,
+        "requiresApproval": True,
+        "rateLimitCount": 2,
+        "rateLimitWindowSeconds": 60,
+        "scope": "internal_only",
+    }
+
+    res = client.post("/playbooks", json=payload, headers=auth_headers)
+    assert res.status_code == 200
+    created = res.json()
+    assert created["minConfidence"] == 0.75
+    assert created["requiresApproval"] is True
+    assert created["rateLimitCount"] == 2
+    assert created["rateLimitWindowSeconds"] == 60
+    assert created["scope"] == "internal_only"
+
+
 def test_settings_get_update_and_validation(client, auth_headers):
     res = client.get("/settings", headers=auth_headers)
     assert res.status_code == 200

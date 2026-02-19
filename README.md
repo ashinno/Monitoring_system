@@ -9,8 +9,8 @@ The primary objective of Sentinel AI is to empower security analysts with tools 
 
 ### Key Features
 - **Real-Time Dashboard**: Live visualization of network traffic and security events using Socket.IO.
-- **AI Analyst**: Integrated with Google Gemini AI and a local Pandas-based heuristic engine to score threats and generate actionable intelligence reports.
-- **Traffic Simulator**: Built-in tool to simulate various network traffic patterns for testing and training.
+- **AI Analyst**: Local LLM (Ollama/Qwen) plus a local heuristic/ML engine for privacy-preserving threat analysis and reports.
+- **Real Traffic Interception**: Built-in host-level interceptor captures live TCP/UDP flows and streams them into the analytics pipeline.
 - **Automated Playbooks**: Rule-based system to automatically respond to threats (e.g., locking users upon detecting critical risks).
 - **User Monitoring**: Activity logging, periodic screenshot capture, and content filtering (gambling, social media, safe search).
 - **Role-Based Access Control**: Granular permissions for Administrators and Analysts.
@@ -18,7 +18,7 @@ The primary objective of Sentinel AI is to empower security analysts with tools 
 ### Technologies Used
 - **Frontend**: React 19, Vite, TypeScript, Tailwind CSS, Recharts, Lucide React.
 - **Backend**: Python 3, FastAPI, SQLAlchemy, SQLite, Socket.IO, Pandas, NumPy.
-- **AI Integration**: Google Generative AI (Gemini), Local Heuristics (Pandas).
+- **AI Integration**: Local Ollama/Qwen runtime, local heuristics/ML pipeline.
 - **Authentication**: OAuth2 with JWT (JSON Web Tokens).
 
 ## 2. Interface Documentation
@@ -32,7 +32,7 @@ Detailed view of network logs, allowing analysts to filter and inspect individua
 
 
 ### AI Analyst
-An interactive chat interface where analysts can query the system and generate PDF threat reports.
+An interactive chat interface where analysts can query the system and generate exportable threat reports.
 
 
 ### Settings & Policy
@@ -48,7 +48,7 @@ Configuration panel for managing monitoring rules, content filters, and screensh
 ### AI Threat Analysis
 - **Dual-Engine Approach**:
   1. **Local Heuristics**: Pandas algorithms analyze log severity distributions to calculate a "Threat Score" (0-100).
-  2. **Generative AI**: Google Gemini analyzes text-based logs to provide natural language summaries and strategic recommendations.
+  2. **Generative AI**: Local Ollama/Qwen analyzes logs to provide natural-language summaries and strategic recommendations.
 - **Output**: Generates detailed text reports and downloadable threat assessments.
 
 ### Automated Playbooks (SOAR)
@@ -97,6 +97,22 @@ Configuration panel for managing monitoring rules, content filters, and screensh
    python main.py
    ```
    The backend API will run on `http://localhost:8000`.
+
+#### Secure one-command backend startup (recommended)
+Use the built-in launcher script to start with safer defaults and your project virtualenv automatically:
+
+```bash
+cd /Users/ashinno/Project/Monitoring/Monitoring_system
+backend/run_secure_dev.sh
+```
+
+Optional overrides:
+
+```bash
+HOST=127.0.0.1 PORT=8001 RELOAD=0 backend/run_secure_dev.sh
+```
+
+By default, this script sets `ENFORCE_STRICT_SECURITY=1` and secure seed passwords unless you override them via environment variables.
 
 ### ML Retraining (Improved)
 You can trigger stronger retraining with configurable parameters:
