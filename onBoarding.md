@@ -1,54 +1,136 @@
-# Sentinel Monitoring System - Onboarding Guide
+# Sentinel Monitoring System - Beginner Onboarding Guide
 
-This guide is for developers and analysts who need to run, validate, and debug the project quickly.
+This guide is written for someone new to this project and new to running full-stack apps.
 
-## 1. What This Project Is
+If you follow this file top to bottom, you will:
 
-Sentinel is a cyber monitoring platform with:
+- run the backend
+- run the frontend
+- log in successfully
+- understand every screen/functionality in the app
+- know what to do when something breaks
 
-- FastAPI backend (`backend/`) for auth, logs, SOAR automation, traffic analysis, and system telemetry
-- React + Vite frontend (`/`) for dashboarding and control
-- Python endpoint agent (`agent/`) for host monitoring and encrypted log ingestion
-- Socket.IO for live updates (`new_log`, `new_traffic`, `prediction_update`, `key_heatmap_update`)
+---
 
-## 2. Architecture at a Glance
+## 1) What You Are Running
 
-- Frontend (default: `http://localhost:3000`) calls backend REST APIs at `http://localhost:8000`
-- Frontend and backend both connect to Socket.IO on backend (`/socket.io`)
-- Backend stores data in SQLite by default (`sentinel.db`) unless `DATABASE_URL` is set
-- Celery + Redis are optional for async jobs; backend gracefully falls back to in-process execution if Redis is down
-- Ollama is optional but needed for LLM-powered `/chat` and AI-enhanced analysis
+Sentinel has 3 parts:
 
-## 3. Prerequisites
+1. Backend API (`backend/`): FastAPI + Socket.IO + database + automation logic
+2. Frontend UI (repo root): React dashboard
+3. Agent (`agent/`): optional endpoint collector that sends activity logs to backend
+
+Think of it this way:
+
+- Frontend = what you see
+- Backend = brain and data storage
+- Agent = optional data producer
+
+---
+
+## 2) Prerequisites
+
+You need these installed:
 
 - Node.js 18+
-- Python 3.9+ recommended
-- `npm` and `pip`
-- Docker + Docker Compose (for Redis/Postgres/worker stack)
-- Ollama (`qwen3:8b` model by default)
+- Python 3.9+
+- npm
+- pip
 
-## 4. Quick Start (Local, Recommended)
+Optional but useful:
 
-Run from repo root: `Monitoring_system`.
+- Docker Desktop (for Redis/Postgres stack)
+- Ollama (for local LLM features like AI chat)
 
-### 4.1 Backend (secure dev launcher)
+---
+
+## 3) Folder and Terminal Basics
+
+Open terminal in project root:
+
+`/Users/ashinno/Project/Monitoring/Monitoring_system`
+
+Check where you are:
+
+```bash
+pwd
+```
+
+You should see the path above.
+
+---
+
+## 4) Fastest First Run (Recommended)
+
+## Step 1: Start backend
+
+From project root:
 
 ```bash
 backend/run_secure_dev.sh
 ```
 
-What this script does:
+Expected result:
 
-- Uses `./.venv/bin/python` if available
-- Enforces stricter security defaults
-- Starts Uvicorn with reload on `0.0.0.0:8000`
+- backend starts on `http://0.0.0.0:8000`
+- you see Uvicorn startup logs
+- no crash
 
-Secure launcher default credentials:
+Important:
 
-- Admin: `admin` / `AdminPass_123!`
-- Analyst: `analyst` / `AnalystPass_123!`
+- keep this terminal running
 
-### 4.2 Backend (manual alternative)
+## Step 2: Start frontend
+
+Open a second terminal in project root:
+
+```bash
+npm install
+npm run dev
+```
+
+Expected result:
+
+- Vite dev server starts
+- frontend available at `http://localhost:3000`
+
+## Step 3: Open app and login
+
+Go to:
+
+`http://localhost:3000`
+
+Use secure launcher default credentials:
+
+- Admin username: `admin`
+- Admin password: `AdminPass_123!`
+
+Alternative username that also works: `Admin User` (because backend accepts ID or name)
+
+Expected result:
+
+- you enter dashboard
+- sidebar shows main modules
+
+---
+
+## 5) If Login Fails
+
+Most common reason: old DB seeded with different passwords.
+
+Reset local SQLite DB and retry:
+
+```bash
+rm -f backend/sentinel.db sentinel.db
+```
+
+Then restart backend and try login again.
+
+---
+
+## 6) Manual Backend Start (Alternative)
+
+If you do not want `run_secure_dev.sh`, use:
 
 ```bash
 cd backend
@@ -56,200 +138,303 @@ python3 -m pip install -r requirements.txt
 python3 main.py
 ```
 
-Manual mode default seeded credentials (if env vars are not set):
+Manual defaults (if env vars are not set):
 
 - Admin: `admin` / `admin`
 - Analyst: `analyst` / `password`
 
-### 4.3 Frontend
+## 6.1) Optional Docker Stack (Backend Services)
 
-From repo root:
-
-```bash
-npm install
-npm run dev
-```
-
-Expected URL: `http://localhost:3000` (Vite config default).
-
-### 4.4 First Login
-
-Use `admin` (ID) or `Admin User` (name) as username, plus matching password.
-
-`/token` accepts both user ID and user name.
-
-If login fails after switching startup modes, you may be using an old seeded DB. Seed users are only created when the DB is empty.
-
-Reset local SQLite DB if needed:
+If you prefer containers for backend services:
 
 ```bash
-rm -f backend/sentinel.db sentinel.db
+docker compose up --build
 ```
 
-## 5. Optional Services
+This starts:
 
-### 5.1 Redis for Celery
+- Postgres (`db`)
+- Redis (`redis`)
+- backend API (`backend`)
+- Celery worker (`worker`)
 
-If Redis is down, backend will still work, but async jobs run in-process.
+Note:
 
-Start only Redis quickly:
+- frontend is still run locally with `npm run dev`
+
+---
+
+## 7) Every Functionality Available (Full Tour)
+
+This section explains all major user-facing functionalities.
+
+## 7.1 Overview (Dashboard)
+
+Purpose:
+
+- live executive view of system state
+
+What you get:
+
+- threat/user/anomaly summary cards
+- threat breakdown bar/stack visuals
+- AI prediction card (`prediction_update` stream)
+- live system metrics panel
+- network traffic charts
+- recent critical events table
+- embedded network graph
+- embedded traffic interceptor panel
+- embedded network analysis panel
+- embedded keymap heatmap
+
+Expected behavior:
+
+- values change as logs/traffic arrive
+- socket events update UI in real time
+
+## 7.2 Live Monitor
+
+Purpose:
+
+- inspect raw activity logs in real time
+
+What you can do:
+
+- search logs
+- filter by risk level
+- export logs
+- watch AI Overwatch summary line
+
+Expected behavior:
+
+- new logs stream into table
+- filter/search updates results immediately
+
+## 7.3 Keylogger Management
+
+Purpose:
+
+- visualize keyboard-derived stats from KEYLOG events
+
+What you can do:
+
+- view total keystrokes/sessions/duration
+- see top applications chart
+- inspect key heatmap intensity
+- export keylog data (CSV/JSON)
+
+Expected behavior:
+
+- if keylog data exists, charts and counts populate
+- heatmap updates with `key_heatmap_update`
+
+## 7.4 AI Analyst
+
+Purpose:
+
+- run deeper analysis and chat with local AI
+
+What you can do:
+
+- click "Run Deep Scan Analysis" (`POST /analyze`)
+- see threat score + recommendations
+- export text report
+- use chat assistant (`POST /chat`)
+- execute suggested action: block IP
+- execute suggested action: isolate host
+- execute suggested action: reset password
+
+Expected behavior:
+
+- analysis panel fills with summary/recommendations
+- chat returns AI answers (if LLM reachable)
+
+## 7.5 Auto-Response (Playbook Automation / SOAR)
+
+Purpose:
+
+- auto-react to suspicious events
+
+What you can do:
+
+- create playbook rules (`if trigger then action`)
+- toggle playbooks on/off
+- delete playbooks
+
+Trigger examples:
+
+- riskLevel equals CRITICAL
+- activityType contains NETWORK
+
+Action examples:
+
+- LOCK_USER
+- QUARANTINE_USER
+- ALERT_ADMIN
+
+Expected behavior:
+
+- when incoming log matches active rule, backend executes corresponding action path
+- action results appear as new logs
+
+## 7.6 User Access Management
+
+Purpose:
+
+- control identities, roles, status, permissions
+
+What you can do:
+
+- create user with role and clearance
+- set explicit permissions (`READ_LOGS`, `EDIT_SETTINGS`, `MANAGE_USERS`, `EXPORT_DATA`)
+- change status (`ACTIVE`, `INACTIVE`, `LOCKED`, `SUSPENDED`, `QUARANTINED`)
+- delete users
+
+Expected behavior:
+
+- table/cards reflect changes immediately after API refresh
+
+## 7.7 Policy Control (Settings)
+
+Purpose:
+
+- central controls for monitoring and policies
+
+What you can configure:
+
+- content controls: block gambling/adult, block social media, safe search enforcement
+- monitoring controls: screen time limits, screenshot capture, clipboard monitoring, USB monitoring, camera monitoring
+- keyword alerts: manage sensitive keyword list
+- notifications: email/webhook/SMTP/Twilio fields and test notification endpoint
+- agent controls: start, stop, and status/PID monitoring
+
+Expected behavior:
+
+- settings save via backend
+- agent state updates every few seconds
+
+## 7.8 Traffic Interception
+
+Purpose:
+
+- collect host network flow info and push to `/traffic`
+
+What you can do:
+
+- list interfaces
+- start/stop interception
+- choose protocol scope and loopback behavior
+- watch packet/byte/error counters
+
+Expected behavior:
+
+- status endpoint updates
+- traffic records appear in charts and analysis modules
+
+## 7.9 Backend API Functionalities (Advanced)
+
+Beyond the UI, backend also supports:
+
+- health/readiness: `/health`, `/ready`
+- ML training: `/ml/train`
+- federated endpoint: `/ml/federated-update`
+- federated endpoint: `/ml/federated/rounds/start`
+- federated endpoint: `/ml/federated/rounds/{round_id}`
+- federated endpoint: `/ml/federated/reveal-mask`
+- federated endpoint: `/ml/federated/global-model`
+- ingestion endpoint: `/logs` (general)
+- ingestion endpoint: `/api/logs` (agent-specific, optional API-key guard)
+
+---
+
+## 8) What "Healthy" Looks Like
+
+Backend healthy:
+
+- starts without crashing
+- `/health` returns JSON
+- frontend requests return 200
+- socket endpoint returns 200 and websocket upgrade accepted
+
+Frontend healthy:
+
+- login screen loads
+- login succeeds
+- sidebar navigation works
+- dashboard data refreshes over time
+
+Quick checks:
+
+```bash
+curl -sS http://127.0.0.1:8000/health
+curl -sS http://127.0.0.1:8000/ready
+curl -i 'http://127.0.0.1:8000/socket.io/?EIO=4&transport=polling'
+```
+
+---
+
+## 9) Optional Components You Might Need
+
+## 9.1 Redis (for Celery worker-backed async)
+
+Start Redis quickly:
 
 ```bash
 docker compose up -d redis
 ```
 
-Disable Celery entirely in local dev:
+If you do not want Celery in local dev:
 
 ```bash
 export SENTINEL_DISABLE_CELERY=1
 ```
 
-### 5.2 Ollama for LLM Features
+## 9.2 Ollama (for AI chat/analysis enhancements)
 
-Default backend LLM target:
+Default backend settings:
 
-- URL: `http://localhost:11434/api/generate`
-- Model: `qwen3:8b`
+- `OLLAMA_URL=http://localhost:11434/api/generate`
+- `OLLAMA_MODEL=qwen3:8b`
 
-Set if needed:
+Set manually if needed:
 
 ```bash
 export OLLAMA_URL=http://localhost:11434/api/generate
 export OLLAMA_MODEL=qwen3:8b
 ```
 
-### 5.3 Agent
+## 9.3 Agent
 
-From repo root:
+Run agent manually:
 
 ```bash
 python3 -m pip install -r agent/requirements.txt
 python3 agent/client.py
 ```
 
-Useful agent env vars:
+Useful env vars:
 
 - `SERVER_URL` (default `http://localhost:8000`)
 - `AGENT_INGEST_PATH` (default `/api/logs`)
-- `AGENT_USER` / `AGENT_PASSWORD`
-- `AGENT_API_KEY` (optional, must match backend if enabled)
+- `AGENT_USER`, `AGENT_PASSWORD`
+- `AGENT_API_KEY`
 
-## 6. Full Stack via Docker Compose
+---
 
-This brings up:
+## 10) Common Problems and Fixes (Beginner Friendly)
 
-- Postgres (`db`)
-- Redis (`redis`)
-- FastAPI backend (`backend`)
-- Celery worker (`worker`)
-
-```bash
-docker compose up --build
-```
-
-Notes:
-
-- Frontend is not in compose; run it locally via `npm run dev`
-- Backend in compose uses Postgres and Redis service DNS names
-
-## 7. Core Functionalities and Expected Results
-
-### 7.1 Auth + RBAC
-
-Expected:
-
-- `POST /token` returns access token
-- `GET /users/me` returns authenticated user
-- Sidebar menus vary by permissions (`READ_LOGS`, `EDIT_SETTINGS`, `MANAGE_USERS`)
-
-### 7.2 Live Monitoring
-
-Views:
-
-- Dashboard (`Overview`)
-- Live Monitor
-- Keylogger
-
-Expected:
-
-- New logs appear in near real time via `new_log`
-- `Recent Critical Events` table updates
-- Key heatmap updates when KEYLOG logs include `activity_summary`
-
-### 7.3 System Metrics
-
-Expected:
-
-- Live mode fetches `/api/system-metrics` every second
-- History mode reads `/api/system-metrics/history`
-- CPU/memory charts update continuously
-
-### 7.4 Network Traffic + Analysis
-
-Expected:
-
-- `/traffic` logs populate graphs
-- `/traffic/analyze` returns anomaly score/details
-- Interception panel can list interfaces, start/stop capture, and show packet/byte/error stats
-
-### 7.5 AI Analyst
-
-Expected:
-
-- `Run Deep Scan Analysis` calls `/analyze`
-- Chat sends `/chat` messages and gets AI responses
-- Action cards can trigger SOAR endpoints (`block-ip`, `isolate-host`, `reset-password`)
-
-### 7.6 Playbooks (SOAR)
-
-Expected:
-
-- Create/toggle/delete playbooks in UI
-- New logs trigger rule evaluation
-- SOAR actions create additional logs (`SOAR_ACTION`)
-
-### 7.7 Agent Lifecycle
-
-From Settings page:
-
-- `POST /agent/start` starts `agent/client.py` subprocess
-- `GET /agent/status` reports running PID
-- `POST /agent/stop` terminates process group
-
-Expected:
-
-- `agent_runtime.log` receives runtime output
-- Agent-sent logs appear via `/api/logs`
-
-## 8. Typical Healthy Startup Signals
-
-Backend healthy indicators:
-
-- Uvicorn starts on `http://0.0.0.0:8000`
-- App startup completes
-- `/health` returns status `ok` or `degraded` with component details
-
-Frontend healthy indicators:
-
-- Login page renders
-- Successful login redirects to dashboard
-- Socket.IO polling and/or websocket upgrade returns HTTP 200
-
-## 9. Debugging Playbook
-
-### 9.1 `http://localhost:3001 is not an accepted origin` or Socket.IO 400
+## 10.1 Error: `localhost:3001 is not an accepted origin`
 
 Cause:
 
-- Origin not in backend CORS/Socket.IO allowlist.
+- frontend origin not accepted by backend CORS/Socket.IO list
 
 Fix:
 
-- Use frontend port `3000` by default, or set `CORS_ALLOWED_ORIGINS` to include your exact origin.
-- Current defaults already include:
-- `localhost/127.0.0.1` on ports `5173`, `3000`, `3001`.
+1. run frontend on `3000` (`npm run dev` default)
+2. or include your origin in `CORS_ALLOWED_ORIGINS`
 
-Quick check:
+Check:
 
 ```bash
 curl -i -X OPTIONS http://127.0.0.1:8000/users/me \
@@ -257,68 +442,66 @@ curl -i -X OPTIONS http://127.0.0.1:8000/users/me \
   -H 'Access-Control-Request-Method: GET'
 ```
 
-### 9.2 `celery.backends.redis: Connection to Redis lost`
+## 10.2 Repeated Redis/Celery retry errors
 
 Cause:
 
-- Redis backend unavailable at configured URL.
+- Redis not running but Celery backend URL points to Redis
 
 Fix options:
 
-1. Start Redis (`docker compose up -d redis`)
-2. Disable Celery (`export SENTINEL_DISABLE_CELERY=1`)
-3. Keep running; backend now falls back to in-process task execution when Redis is unreachable
+1. start Redis
+2. disable Celery (`SENTINEL_DISABLE_CELERY=1`)
+3. continue running: backend now falls back in-process when Redis unreachable
 
-### 9.3 Many `OPTIONS` and frequent `GET /api/system-metrics` requests
+## 10.3 Too many `OPTIONS` / `GET /api/system-metrics` logs
 
 Cause:
 
-- Frontend polling is aggressive by design in dev:
-- System metrics every 1s
-- Interception status every ~2s
-- Other periodic refreshes in multiple panels
-- React StrictMode can double-invoke effects during development
+- expected frontend polling (especially in dev + StrictMode)
 
 Action:
 
-- This is normal in development unless volume is causing local performance issues.
+- normal behavior unless performance is impacted
 
-### 9.4 `SECRET_KEY not provided` and weak default credential warnings
+## 10.4 Warning: weak/default security values
 
 Cause:
 
-- Running without hardened env vars.
+- missing `SECRET_KEY` or weak default passwords
 
 Fix:
 
-- Use `backend/run_secure_dev.sh`, or set:
+- prefer `backend/run_secure_dev.sh`
+- or set env vars manually:
 - `SECRET_KEY`
 - `DEFAULT_ADMIN_PASSWORD`
 - `DEFAULT_ANALYST_PASSWORD`
-- Optionally `ENFORCE_STRICT_SECURITY=1`
+- `ENFORCE_STRICT_SECURITY=1`
 
-### 9.5 Agent logs not arriving
+## 10.5 Agent not sending logs
 
-Checks:
+Checklist:
 
-1. Agent can authenticate (`/token`)
-2. Agent posts to `SERVER_URL + AGENT_INGEST_PATH` (default `/api/logs`)
-3. If backend enforces `AGENT_API_KEY`, agent sends matching `X-Agent-Api-Key`
-4. Inspect `agent_runtime.log` and `agent_buffer.db` (offline queue)
+1. agent login works against `/token`
+2. `SERVER_URL` correct
+3. backend reachable from agent host
+4. if API key enabled on backend, agent key matches
+5. inspect `agent_runtime.log` and `agent_buffer.db`
 
-### 9.6 Keylogger/screenshot features not working
+## 10.6 Keylogger or screenshot data missing (macOS)
 
-macOS notes:
+Cause:
 
-- Keylogger (`pynput`) requires Accessibility/Input Monitoring permissions
-- Screenshot capture uses `screencapture`; backend background tasks must be enabled
-- Screenshot logs depend on `captureScreenshots=true` in settings
+- OS permissions not granted
 
-### 9.7 Matplotlib cache warnings
+Fix:
 
-Symptom:
+- grant Input Monitoring / Accessibility permissions
+- enable screenshot setting in UI
+- ensure backend background tasks are not disabled
 
-- `Matplotlib is building the font cache` or unwritable cache dir warnings.
+## 10.7 Matplotlib cache warnings
 
 Fix:
 
@@ -327,31 +510,23 @@ export MPLCONFIGDIR=/tmp/sentinel_mplconfig
 mkdir -p "$MPLCONFIGDIR"
 ```
 
-## 10. Useful Smoke Checks
+---
 
-#### 10.1 API health
+## 11) Beginner Smoke Test (Copy/Paste)
 
-```bash
-curl -sS http://127.0.0.1:8000/health
-curl -sS http://127.0.0.1:8000/ready
-```
+Run these after startup.
 
-#### 10.2 Login/token
+## 11.1 Get token
 
 ```bash
-# Replace password with your current seeded value (e.g. AdminPass_123! in secure launcher mode)
 curl -sS -X POST http://127.0.0.1:8000/token \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'username=admin&password=AdminPass_123%21'
 ```
 
-#### 10.3 Socket.IO handshake
+If using manual backend defaults, change password to `admin`.
 
-```bash
-curl -i 'http://127.0.0.1:8000/socket.io/?EIO=4&transport=polling'
-```
-
-#### 10.4 Create a test log
+## 11.2 Create a test log
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/logs \
@@ -369,9 +544,16 @@ curl -sS -X POST http://127.0.0.1:8000/logs \
   }'
 ```
 
-## 11. Test Commands
+Expected result:
 
-### 11.1 Backend + Agent Python tests
+- API returns saved log JSON
+- log appears in UI lists shortly
+
+---
+
+## 12) Testing Commands
+
+## 12.1 Python tests (backend + agent)
 
 ```bash
 python3 -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
@@ -385,39 +567,49 @@ Performance tests:
 SENTINEL_P95_MS=500 python3 -m pytest -m performance
 ```
 
-### 11.2 Frontend tests
+## 12.2 Frontend unit tests
 
 ```bash
 npm ci
 npm run test:unit
 ```
 
-### 11.3 E2E tests
+## 12.3 E2E tests
 
 ```bash
 npx playwright install
 npm run test:e2e
 ```
 
-Artifacts are generated under `reports/`.
-
-## 12. Key Files to Know
-
-- `backend/main.py` - main API, sockets, auth, ingestion, SOAR wiring
-- `backend/config.py` - env settings, security posture checks, CORS origins
-- `backend/interception.py` - live traffic interception engine
-- `backend/simulation.py` - synthetic traffic generation
-- `backend/soar_engine.py` - rule evaluation + action execution
-- `agent/client.py` - endpoint agent runtime + secure log sending
-- `services/api.ts` - frontend API client and auth interceptor
-- `components/` - UI modules by feature
+Reports are written to `reports/`.
 
 ---
 
-If you are onboarding a teammate, the fastest path is:
+## 13) File Map (Where to Look in Code)
 
-1. Start backend with `backend/run_secure_dev.sh`
-2. Start frontend with `npm run dev`
-3. Login as `admin`
-4. Open Dashboard, AI Analyst, Automation, Settings
-5. Run smoke checks in section 10 if anything looks off
+- `backend/main.py`: API routes, socket events, startup seeding, SOAR dispatch
+- `backend/config.py`: environment settings, security posture checks, CORS defaults
+- `backend/interception.py`: live traffic interception logic
+- `backend/simulation.py`: synthetic traffic generation
+- `backend/soar_engine.py`: playbook evaluation and action execution
+- `agent/client.py`: agent runtime, auth, log send, offline queue flush
+- `services/api.ts`: frontend API baseURL + auth interceptor
+- `components/`: each UI module
+
+---
+
+## 14) 10-Minute Guided Demo Path
+
+If you are demoing to someone new, do this sequence:
+
+1. start backend (`backend/run_secure_dev.sh`)
+2. start frontend (`npm run dev`)
+3. login as admin
+4. open Overview and confirm live widgets render
+5. open Live Monitor and use search/filter
+6. open AI Analyst and run deep scan
+7. open Auto-Response and create one playbook
+8. open Settings and toggle one policy + save
+9. run smoke test log command and watch UI update
+
+You now validated the full main flow.
