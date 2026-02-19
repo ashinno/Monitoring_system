@@ -206,8 +206,8 @@ class SentinelAgent:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
-        if Config.AGENT_API_KEY:
-            headers["X-Agent-Api-Key"] = Config.AGENT_API_KEY
+        if Config.AGENT_API_KEY and Config.AGENT_API_KEY.strip():
+            headers["X-Agent-Api-Key"] = Config.AGENT_API_KEY.strip()
 
         self._flush_offline_queue(headers)
 

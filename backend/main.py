@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
-from typing import List
+from typing import Any, List
 from contextlib import asynccontextmanager
 import socketio
+import socket
 import uvicorn
 import asyncio
 import os
@@ -13,7 +14,9 @@ import uuid
 import httpx
 import json
 import joblib
+import time
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 import models, schemas, auth, analysis, database, ml_engine, prediction_engine, system_monitor, reporting, notifications, soar_engine
 import agent_manager
@@ -25,18 +28,69 @@ from llm.cache import LLMResponseCache
 from llm.contracts import validate_assessment
 
 
-def _safe_float(value, default: float = 0.0) -> float:
+def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
     except Exception:
         return float(default)
 
 
-def _safe_int(value, default: int = 0) -> int:
+def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except Exception:
         return int(default)
+
+
+_CELERY_RECHECK_SECONDS = 30.0
+_celery_retry_after = 0.0
+
+
+def _is_redis_reachable(redis_url: str, timeout_seconds: float = 0.2) -> bool:
+    if not redis_url:
+        return False
+
+    parsed = urlparse(redis_url)
+    if parsed.scheme not in {"redis", "rediss"}:
+        # Non-Redis transports are not proactively probed here.
+        return True
+
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 6379
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
+def _celery_dispatch_enabled() -> bool:
+    global _celery_retry_after
+
+    if os.getenv("SENTINEL_DISABLE_CELERY") == "1":
+        return False
+
+    now = time.monotonic()
+    if now < _celery_retry_after:
+        return False
+
+    broker_ok = _is_redis_reachable(settings.CELERY_BROKER_URL)
+    backend_ok = True
+    if settings.CELERY_RESULT_BACKEND:
+        backend_ok = _is_redis_reachable(settings.CELERY_RESULT_BACKEND)
+
+    if broker_ok and backend_ok:
+        return True
+
+    _celery_retry_after = now + _CELERY_RECHECK_SECONDS
+    print("Warning: Redis is unavailable; using in-process task execution temporarily.")
+    return False
+
+
+def _mark_celery_unavailable() -> None:
+    global _celery_retry_after
+    _celery_retry_after = time.monotonic() + _CELERY_RECHECK_SECONDS
 
 # --- DB Setup ---
 models.Base.metadata.create_all(bind=database.engine)
@@ -541,11 +595,12 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
 
     # --- SOAR Automation (Background Task) ---
     # Using Celery for scalability
-    celery_enabled = os.getenv("SENTINEL_DISABLE_CELERY") != "1"
+    celery_enabled = _celery_dispatch_enabled()
     if celery_enabled:
         try:
             tasks.run_soar_automation.delay(db_log.id)
         except Exception as e:
+            _mark_celery_unavailable()
             print(f"Warning: Async task failed. Scheduling SOAR in-process. Error: {e}")
             asyncio.create_task(asyncio.to_thread(soar_engine.engine.run_automation, db_log.id))
     else:
@@ -579,6 +634,7 @@ async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, 
         try:
             tasks.run_prediction_analysis.delay(db_log.id)
         except Exception as e:
+            _mark_celery_unavailable()
             print(f"Warning: Async task failed. Scheduling Prediction in-process. Error: {e}")
             if db_log.risk_level in ['HIGH', 'CRITICAL']:
                 asyncio.create_task(prediction_engine.predictor.predict_next_step_ai(db_log.activity_type))
