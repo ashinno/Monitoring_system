@@ -6,6 +6,136 @@ import os
 import httpx
 import asyncio
 import json
+import time
+
+# LLM Model Configuration with Quantization Support
+# Thesis Claim: 4-bit quantized models for balance of latency/accuracy
+LLM_MODEL_CONFIGS = {
+    "qwen3:8b": {
+        "display_name": "Qwen 3 8B (Full)",
+        "quantization": None,
+        "bits": 64,
+        "description": "Full precision Qwen 3 8B model"
+    },
+    "qwen3:8b-q4_K_M": {
+        "display_name": "Qwen 3 8B (4-bit)",
+        "quantization": "q4_K_M",
+        "bits": 4,
+        "description": "4-bit quantized for reduced latency"
+    },
+    "qwen3:8b-q5_K_M": {
+        "display_name": "Qwen 3 8B (5-bit)",
+        "quantization": "q5_K_M",
+        "bits": 5,
+        "description": "5-bit quantized for better accuracy"
+    },
+    "qwen3:4b": {
+        "display_name": "Qwen 3 4B",
+        "quantization": None,
+        "bits": 32,
+        "description": "Smaller 4B model for faster inference"
+    },
+    "qwen3:4b-q4_K_M": {
+        "display_name": "Qwen 3 4B (4-bit)",
+        "quantization": "q4_K_M",
+        "bits": 4,
+        "description": "4-bit quantized smaller model"
+    },
+    "mistral:7b": {
+        "display_name": "Mistral 7B",
+        "quantization": None,
+        "bits": 32,
+        "description": "Mistral 7B baseline"
+    },
+    "mistral:7b-q4_0": {
+        "display_name": "Mistral 7B (4-bit)",
+        "quantization": "q4_0",
+        "bits": 4,
+        "description": "4-bit quantized Mistral"
+    }
+}
+
+def get_llm_config(model_name: str = None) -> Dict[str, Any]:
+    """Get LLM configuration by model name."""
+    model_name = model_name or os.getenv("OLLAMA_MODEL", "qwen3:8b")
+    return LLM_MODEL_CONFIGS.get(model_name, LLM_MODEL_CONFIGS["qwen3:8b"])
+
+def list_available_models() -> List[Dict[str, Any]]:
+    """List all available model configurations."""
+    return [
+        {"id": k, **v}
+        for k, v in LLM_MODEL_CONFIGS.items()
+    ]
+
+class LLMQuantizationBenchmark:
+    """Benchmark different quantization levels for thesis latency evaluation."""
+
+    def __init__(self):
+        self.results = []
+
+    async def benchmark_model(self, model_name: str, num_requests: int = 10) -> Dict[str, Any]:
+        """Benchmark a specific model's latency."""
+        config = get_llm_config(model_name)
+        latencies = []
+
+        OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+
+        test_prompt = "Analyze this security event: User failed login attempt."
+
+        for _ in range(num_requests):
+            try:
+                start = time.perf_counter()
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        OLLAMA_URL,
+                        json={
+                            "model": model_name,
+                            "prompt": test_prompt,
+                            "stream": False,
+                        },
+                        timeout=30.0
+                    )
+                    latency = (time.perf_counter() - start) * 1000  # ms
+                    latencies.append(latency)
+            except Exception as e:
+                print(f"Error benchmarking {model_name}: {e}")
+
+        if latencies:
+            return {
+                "model": model_name,
+                "config": config,
+                "avg_latency_ms": sum(latencies) / len(latencies),
+                "min_latency_ms": min(latencies),
+                "max_latency_ms": max(latencies),
+                "successful_requests": len(latencies)
+            }
+        return None
+
+    async def run_benchmark(self) -> List[Dict[str, Any]]:
+        """Run benchmark on all configured models."""
+        print("Running LLM Quantization Benchmark...")
+
+        tasks = []
+        for model_name in LLM_MODEL_CONFIGS.keys():
+            task = self.benchmark_model(model_name)
+            tasks.append(task)
+
+        results = await asyncio.gather(*tasks)
+        self.results = [r for r in results if r is not None]
+
+        return self.results
+
+    def get_recommended_model(self) -> str:
+        """Get recommended model based on latency/accuracy tradeoff."""
+        if not self.results:
+            return "qwen3:8b"
+
+        # Find model with best balance (prefer 4-bit if close)
+        for r in sorted(self.results, key=lambda x: x["avg_latency_ms"]):
+            if r["avg_latency_ms"] < 2000:  # Under 2 seconds
+                return r["model"]
+
+        return "qwen3:8b"
 
 class MarkovPredictor:
     def __init__(self):

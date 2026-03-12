@@ -48,3 +48,4 @@ thesis_figures/
 thesis_combined/
 thesis/
 run_secure_dev.sh*
+*.docx

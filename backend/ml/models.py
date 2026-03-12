@@ -643,11 +643,41 @@ class XGBoostRiskModel(BaseModel):
         if not self.model:
             return np.zeros(len(X))
         return self.model.predict(X)
-    
+
     def predict_proba(self, X):
         if not self.model:
             return np.zeros((len(X), 1))
         return self.model.predict_proba(X)
+
+
+class RandomForestRiskModel(BaseModel):
+    """Random Forest classifier as fallback when XGBoost is not available."""
+    def __init__(
+        self,
+        model_path="ml_artifacts",
+        n_estimators=300,
+        max_depth=10,
+        random_state=42,
+    ):
+        super().__init__(model_path)
+        self.model_name = "random_forest_risk"
+        self.model = RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=random_state,
+            n_jobs=-1,
+        )
+
+    def train(self, X, y):
+        print("Training Random Forest Classifier...")
+        self.model.fit(X, y)
+
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
 
 # --- Deep Learning: AutoEncoder for Anomaly Detection ---
 

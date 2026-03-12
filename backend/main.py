@@ -23,6 +23,8 @@ import agent_manager
 import tasks # Explicit import for Celery tasks
 from config import settings
 from security.agent_auth import verify_agent_api_key
+from security.pii_redaction import redact_log, configure_pii_redaction
+from security.dynamic_keywords import update_keywords_from_ghost, get_dynamic_keywords, match_text_keywords
 from llm.sanitizer import sanitize_context_items, sanitize_text
 from llm.cache import LLMResponseCache
 from llm.contracts import validate_assessment
@@ -542,6 +544,10 @@ def get_keylog_stats(
 async def create_log(log: schemas.LogCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # Save to DB
     log_data = log.model_dump()
+
+    # PII Redaction - Remove sensitive data before storage
+    # Implements Thesis O1.2: Privacy-by-Design with local redaction
+    log_data = redact_log(log_data)
     
     # Check Settings for policy enforcement
     settings_obj = db.query(models.Settings).first()
@@ -896,14 +902,64 @@ def update_settings(settings: schemas.SettingsCreate, db: Session = Depends(get_
     if not db_settings:
         db_settings = models.Settings(id=1)
         db.add(db_settings)
-    
+
     update_data = settings.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_settings, key, value)
-        
+
     db.commit()
     db.refresh(db_settings)
     return db_settings
+
+
+@app.get("/keywords/dynamic")
+async def get_dynamic_keyword_clusters():
+    """Get all dynamic keyword clusters."""
+    clusters = {}
+    from security.dynamic_keywords import keyword_cluster
+    for name, cluster in keyword_cluster.clusters.items():
+        clusters[name] = {
+            "keywords": list(cluster.keywords),
+            "source": cluster.source,
+            "last_updated": cluster.last_updated,
+            "count": len(cluster.keywords)
+        }
+    return {"clusters": clusters, "total_keywords": len(keyword_cluster.get_all_keywords())}
+
+
+@app.post("/keywords/update-from-ghost")
+async def update_keywords_from_ghost_endpoint(ghost_url: str = None, ghost_api_key: str = None):
+    """Update keywords from Ghost CMS blog."""
+    success = update_keywords_from_ghost(ghost_url, ghost_api_key)
+    if success:
+        return {"status": "success", "message": "Keywords updated from Ghost CMS"}
+    return {"status": "error", "message": "Could not fetch from Ghost CMS"}
+
+
+@app.post("/keywords/match")
+async def match_text_with_keywords(request: dict):
+    """Match text against dynamic keyword clusters."""
+    text = request.get("text", "")
+    if not text:
+        return {"error": "No text provided"}
+
+    matches = match_text_keywords(text)
+    return {"matches": matches, "matched_clusters": len(matches)}
+
+
+@app.post("/keywords/clusters", response_model=dict)
+async def add_keyword_cluster(request: dict, _: models.User = Depends(auth.get_current_user)):
+    """Add a new keyword cluster."""
+    name = request.get("name")
+    keywords = request.get("keywords", [])
+
+    if not name or not keywords:
+        return {"error": "Name and keywords required"}
+
+    from security.dynamic_keywords import keyword_cluster
+    keyword_cluster.add_cluster(name, keywords, source="manual")
+
+    return {"status": "success", "cluster": name, "keywords": keywords}
 
 @app.post("/chat", response_model=schemas.ChatResponse)
 async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depends(auth.get_current_user)):

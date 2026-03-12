@@ -1,0 +1,71 @@
+{
+  "timestamp": "2026-02-26T10:33:58.700127",
+  "thesis_claims": {
+    "f1_score_claim": {
+      "claimed": "0.93",
+      "actual": 1.0,
+      "best_model": "random_forest",
+      "passed": true,
+      "status": "PASS"
+    },
+    "latency_claim": {
+      "claimed": "<500ms",
+      "actual": "3.42ms",
+      "passed": true,
+      "status": "PASS"
+    },
+    "privacy_claim": {
+      "claimed": "On-premise LLM",
+      "actual": "Local Ollama integration",
+      "passed": true,
+      "status": "PASS"
+    }
+  },
+  "evaluations": {
+    "random_forest": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "latency_ms": 12.793642011238262
+    },
+    "isolation_forest": {
+      "accuracy": 0.9577,
+      "precision": 0.06451612903225806,
+      "recall": 0.13071895424836602,
+      "f1_score": 0.08639308855291576,
+      "latency_ms": 4.429576679249294
+    },
+    "autoencoder": {
+      "accuracy": 0.9709,
+      "precision": 0.13297872340425532,
+      "recall": 0.16339869281045752,
+      "f1_score": 0.1466275659824047,
+      "latency_ms": 0.5972550011938438
+    },
+    "hybrid": {
+      "accuracy": 0.9722,
+      "precision": 0.1890547263681592,
+      "recall": 0.24836601307189543,
+      "f1_score": 0.21468926553672316,
+      "latency_ms": 0.0
+    }
+  },
+  "benchmarks": {
+    "latency": {
+      "isolation_forest_p50": 3.1592090090271086,
+      "isolation_forest_p95": 3.873087480315006,
+      "isolation_forest_p99": 5.9749191644368755,
+      "autoencoder_p50": 0.09916597628034651,
+      "autoencoder_p95": 0.1144580019172281,
+      "autoencoder_p99": 0.18267865059897329,
+      "hybrid_p50": 3.4178334899479523,
+      "hybrid_p95": 4.480091357254423,
+      "hybrid_p99": 6.216416084207596
+    },
+    "throughput": {
+      "isolation_forest_rps": 300.0,
+      "autoencoder_rps": 9680.0
+    }
+  }
+}
