@@ -1,12 +1,19 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { API_BASE_URL, getKeylogStats } from '../services/api';
 
 interface KeyStats {
     [key: string]: number;
 }
 
-const SOCKET_URL = 'http://localhost:8000';
+const SOCKET_URL = API_BASE_URL;
+
+const normalizeKey = (rawKey: string) => {
+    const trimmed = String(rawKey || '').trim();
+    const withoutPrefix = trimmed.replace(/^key\./i, '');
+    return withoutPrefix.toUpperCase();
+};
 
 const KEYBOARD_LAYOUT = [
     ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'BACKSPACE'],
@@ -21,7 +28,31 @@ const KeymapHeatmap: React.FC = () => {
     const [dwellTime, setDwellTime] = useState<KeyStats>({}); // Placeholder for now
 
     useEffect(() => {
-        const socket = io(SOCKET_URL);
+        const loadHistoricalHeatmap = async () => {
+            try {
+                const response = await getKeylogStats();
+                const historicalCounts = response?.data?.key_counts;
+                if (!historicalCounts || typeof historicalCounts !== 'object') {
+                    return;
+                }
+                setKeyCounts(prev => {
+                    const next = { ...prev };
+                    Object.entries(historicalCounts).forEach(([key, count]) => {
+                        const normalized = normalizeKey(key);
+                        next[normalized] = (next[normalized] || 0) + Number(count || 0);
+                    });
+                    return next;
+                });
+            } catch (_error) {
+            }
+        };
+
+        loadHistoricalHeatmap();
+
+        const socket = io(SOCKET_URL, {
+            transports: ['websocket', 'polling'],
+            withCredentials: true,
+        });
 
         socket.on('connect', () => {
             console.log('Connected to socket for heatmap');
@@ -33,8 +64,7 @@ const KeymapHeatmap: React.FC = () => {
             setKeyCounts(prev => {
                 const next = { ...prev };
                 Object.entries(data).forEach(([key, count]) => {
-                    // Normalize key names
-                    const k = key.toUpperCase().replace('KEY.', '');
+                    const k = normalizeKey(key);
                     next[k] = (next[k] || 0) + (count as number);
                 });
                 return next;
@@ -53,7 +83,7 @@ const KeymapHeatmap: React.FC = () => {
     }, [keyCounts]);
 
     const getKeyColor = (key: string) => {
-        const k = key.toUpperCase();
+        const k = normalizeKey(key);
         const count = keyCounts[k] || 0;
         
         if (count === 0) return 'bg-slate-800 border-slate-700 text-slate-500';

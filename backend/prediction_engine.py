@@ -85,7 +85,7 @@ class LLMQuantizationBenchmark:
         for _ in range(num_requests):
             try:
                 start = time.perf_counter()
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(trust_env=False) as client:
                     response = await client.post(
                         OLLAMA_URL,
                         json={
@@ -204,7 +204,7 @@ class MarkovPredictor:
         """
         
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False) as client:
                 response = await client.post(OLLAMA_URL, json={
                     "model": MODEL,
                     "prompt": prompt,

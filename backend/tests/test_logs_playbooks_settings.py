@@ -64,6 +64,9 @@ def test_create_log_applies_keyword_policy_and_emits(client, auth_headers, backe
     assert created["riskLevel"] == "HIGH"
     assert "KEYWORD DETECTED" in created["description"]
     assert any(e[0] == "new_log" for e in sio.emitted)
+    heatmap_events = [payload for event, payload in sio.emitted if event == "key_heatmap_update"]
+    assert heatmap_events
+    assert heatmap_events[-1] == {"a": 1}
 
 
 def test_logs_read_and_keylog_stats(client, auth_headers):
@@ -93,7 +96,9 @@ def test_logs_read_and_keylog_stats(client, auth_headers):
     assert res.status_code == 200
     stats = res.json()
     assert stats["total_sessions"] >= 3
-    assert "total_keystrokes" in stats
+    assert stats["total_keystrokes"] == 6
+    assert stats["total_duration_seconds"] == 0
+    assert stats["top_apps"][0]["name"] == "Unknown"
     assert isinstance(stats["top_apps"], list)
 
 

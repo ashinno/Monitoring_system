@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Square, Activity, RefreshCw, Network, Timer, AlertTriangle } from 'lucide-react';
-import { getInterceptionInterfaces, getInterceptionStatus, startInterception, stopInterception } from '../services/api';
+import { AttackScenario, getInterceptionInterfaces, getInterceptionStatus, simulateAttackBurst, startInterception, stopInterception } from '../services/api';
 
 type InterceptionStats = {
     packetsIntercepted: number;
@@ -14,11 +14,20 @@ const defaultStats: InterceptionStats = {
     errors: 0,
 };
 
+const attackOptions: { id: AttackScenario; label: string; burst: number }[] = [
+    { id: 'ddos', label: 'Simulate DDoS', burst: 40 },
+    { id: 'port_scan', label: 'Simulate Port Scan', burst: 60 },
+    { id: 'brute_force', label: 'Simulate Brute Force', burst: 45 },
+    { id: 'data_exfiltration', label: 'Simulate Exfiltration', burst: 30 },
+];
+
 const TrafficInterceptor: React.FC = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [loading, setLoading] = useState(false);
     const [interfaces, setInterfaces] = useState<string[]>([]);
     const [stats, setStats] = useState<InterceptionStats>(defaultStats);
+    const [attackLoading, setAttackLoading] = useState<AttackScenario | null>(null);
+    const [attackResult, setAttackResult] = useState('');
     const [config, setConfig] = useState({
         interface: '',
         protocols: ['TCP', 'UDP'],
@@ -118,6 +127,20 @@ const TrafficInterceptor: React.FC = () => {
             console.error('Failed to stop interception', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const runAttackSimulation = async (scenario: AttackScenario, burst: number) => {
+        setAttackLoading(scenario);
+        setAttackResult('');
+        try {
+            const result = await simulateAttackBurst(scenario, burst);
+            setAttackResult(`${scenario.replace('_', ' ').toUpperCase()} injected ${result.successful}/${result.attempted} events`);
+        } catch (error) {
+            console.error('Failed to simulate attack', error);
+            setAttackResult(`Failed to run ${scenario.replace('_', ' ').toUpperCase()} simulation`);
+        } finally {
+            setAttackLoading(null);
         }
     };
 
@@ -236,6 +259,29 @@ const TrafficInterceptor: React.FC = () => {
                                 {loading ? <RefreshCw className="animate-spin" size={18} /> : <Square size={18} fill="currentColor" />}
                                 Stop Interception
                             </button>
+                        )}
+                    </div>
+
+                    <div className="bg-slate-900/50 rounded border border-slate-800 p-3 space-y-3">
+                        <div className="text-xs text-slate-300 font-mono">Attack Simulation</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {attackOptions.map((option) => (
+                                <button
+                                    key={option.id}
+                                    onClick={() => runAttackSimulation(option.id, option.burst)}
+                                    disabled={!!attackLoading}
+                                    className={`px-2 py-2 text-xs font-medium rounded border transition-all ${
+                                        attackLoading === option.id
+                                            ? 'bg-red-500/30 border-red-500 text-red-200'
+                                            : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                                    } disabled:opacity-50`}
+                                >
+                                    {attackLoading === option.id ? 'Injecting...' : option.label}
+                                </button>
+                            ))}
+                        </div>
+                        {attackResult && (
+                            <div className="text-xs font-mono text-cyan-300">{attackResult}</div>
                         )}
                     </div>
                 </div>

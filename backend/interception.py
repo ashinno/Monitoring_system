@@ -45,6 +45,11 @@ class TrafficInterceptor:
         parsed = urlparse(self.api_url)
         self._ingest_host = parsed.hostname or "127.0.0.1"
         self._ingest_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        self._last_access_denied_log_at = 0.0
+        self._access_denied_log_interval_seconds = max(
+            1,
+            int(os.getenv("TRAFFIC_ACCESS_DENIED_LOG_INTERVAL_SECONDS", "30")),
+        )
 
     def get_available_interfaces(self) -> List[str]:
         return sorted(psutil.net_if_addrs().keys())
@@ -163,7 +168,7 @@ class TrafficInterceptor:
             connections = psutil.net_connections(kind="inet")
         except (psutil.AccessDenied, psutil.Error) as exc:
             self._stats["errors"] += 1
-            logger.warning("Connection listing denied: %s", exc)
+            self._log_access_denied(exc)
             return []
 
         for conn in connections:
@@ -266,6 +271,16 @@ class TrafficInterceptor:
             return True
 
         return False
+
+    def _log_access_denied(self, exc: Exception):
+        now = time.monotonic()
+        if (now - self._last_access_denied_log_at) < self._access_denied_log_interval_seconds:
+            return
+        self._last_access_denied_log_at = now
+        logger.warning(
+            "Connection listing denied: %s. Grant elevated privileges to list host connections.",
+            exc,
+        )
 
     def _ingest_packet(self, packet: Dict[str, object]) -> bool:
         try:

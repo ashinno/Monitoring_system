@@ -315,7 +315,7 @@ const App: React.FC = () => {
 
                     {/* View Content */}
                     <div className="animate-fadeIn">
-                        {currentView === 'DASHBOARD' && <Dashboard logs={logs} />}
+                        {currentView === 'DASHBOARD' && <Dashboard logs={logs} users={users} />}
                         {currentView === 'LIVE_MONITOR' && <ActivityLog logs={logs} />}
                         {currentView === 'KEYLOGGER' && <KeyloggerPanel />}
                         {currentView === 'AI_ANALYST' && <AIAnalyst />} 

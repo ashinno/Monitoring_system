@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="0.066357916">
-    <testsuite name="tests/api.test.ts" timestamp="2026-01-20T10:02:14.485Z" hostname="Ash.local" tests="2" failures="0" errors="0" skipped="0" time="0.011943833">
-        <testcase classname="tests/api.test.ts" name="adds Authorization header when token exists" time="0.001739">
+<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="0.071875375">
+    <testsuite name="tests/api.test.ts" timestamp="2026-03-16T13:37:21.036Z" hostname="Ash" tests="2" failures="0" errors="0" skipped="0" time="0.012578792">
+        <testcase classname="tests/api.test.ts" name="adds Authorization header when token exists" time="0.001971375">
         </testcase>
-        <testcase classname="tests/api.test.ts" name="clears token and redirects on 401" time="0.009710625">
+        <testcase classname="tests/api.test.ts" name="clears token and redirects on 401" time="0.010095542">
             <system-err>
 Unauthorized access. Redirecting to login.
 
             </system-err>
         </testcase>
     </testsuite>
-    <testsuite name="tests/login.test.tsx" timestamp="2026-01-20T10:02:14.485Z" hostname="Ash.local" tests="1" failures="0" errors="0" skipped="0" time="0.054414083">
-        <testcase classname="tests/login.test.tsx" name="submits credentials after delay and calls onLogin" time="0.054020709">
+    <testsuite name="tests/login.test.tsx" timestamp="2026-03-16T13:37:21.036Z" hostname="Ash" tests="1" failures="0" errors="0" skipped="0" time="0.059296583">
+        <testcase classname="tests/login.test.tsx" name="submits credentials after delay and calls onLogin" time="0.058839916">
         </testcase>
     </testsuite>
 </testsuites>

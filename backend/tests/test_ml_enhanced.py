@@ -22,6 +22,8 @@ def populate_db(backend_app_module):
     """
     db = backend_app_module.database.SessionLocal()
     models = backend_app_module.models
+    db.query(models.Log).delete()
+    db.commit()
     
     # Create logs
     logs = []

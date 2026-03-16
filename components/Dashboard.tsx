@@ -4,7 +4,7 @@ import {
     BarChart, Bar, Cell, Legend
 } from 'recharts';
 import { ShieldAlert, Globe, Users, BrainCircuit, Sparkles, PieChart } from 'lucide-react';
-import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult } from '../types';
+import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult, UserProfile } from '../types';
 import { getNetworkTraffic } from '../services/api';
 import NetworkAnalysis from './NetworkAnalysis';
 import NetworkGraph from './NetworkGraph';
@@ -15,6 +15,7 @@ import { io } from 'socket.io-client';
 
 interface DashboardProps {
     logs: LogEntry[];
+    users: UserProfile[];
 }
 
 // Custom Tooltip Component for Cyber Look
@@ -36,7 +37,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
+const Dashboard: React.FC<DashboardProps> = ({ logs, users }) => {
     const [chartData, setChartData] = useState<any[]>([]);
     const [trafficLogs, setTrafficLogs] = useState<NetworkTraffic[]>([]);
     const [prediction, setPrediction] = useState<PredictionResult | null>(null);
@@ -116,7 +117,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs }) => {
 
     // Dynamic Calculations
     const threatsBlocked = logs.filter(l => l.riskLevel === RiskLevel.HIGH || l.riskLevel === RiskLevel.CRITICAL).length;
-    const activeUsers = new Set(logs.map(l => l.user)).size;
+    const activeUsers = users.filter(user => user.status === 'ACTIVE').length;
     const aiAnomalies = logs.filter(l => l.description.includes("[ML_DETECTED]")).length;
     
     // Risk Counts for Breakdown Card

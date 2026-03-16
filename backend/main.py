@@ -148,7 +148,7 @@ async def analyze_screenshot_context(filepath: str, db: Session):
     """
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             # Ollama 'generate' endpoint supports 'images' list (base64)
             response = await client.post(OLLAMA_URL, json={
                 "model": MODEL,
@@ -498,6 +498,7 @@ def get_keylog_stats(
     total_duration = 0.0
     app_usage = {}
     total_keystrokes = 0
+    aggregated_key_counts = {}
     
     for log in logs:
         if log.activity_summary:
@@ -505,6 +506,11 @@ def get_keylog_stats(
                 data = json.loads(log.activity_summary)
                 # Handle new format
                 if isinstance(data, dict) and "key_counts" in data:
+                    key_counts = data.get("key_counts", {})
+                    if isinstance(key_counts, dict):
+                        for key, count in key_counts.items():
+                            normalized_key = str(key)
+                            aggregated_key_counts[normalized_key] = aggregated_key_counts.get(normalized_key, 0) + _safe_int(count)
                     total_duration += float(data.get("duration_seconds", 0))
                     total_keystrokes += int(data.get("total_keystrokes", 0))
                     app = data.get("active_window", "Unknown")
@@ -515,6 +521,9 @@ def get_keylog_stats(
                     # Estimate keystrokes from sum of counts
                     count_sum = sum(data.values())
                     total_keystrokes += count_sum
+                    for key, count in data.items():
+                        normalized_key = str(key)
+                        aggregated_key_counts[normalized_key] = aggregated_key_counts.get(normalized_key, 0) + _safe_int(count)
                     # No duration or app data in old format, but count as session
                     app = "Unknown"
                     app_usage[app] = app_usage.get(app, 0) + 1
@@ -537,7 +546,8 @@ def get_keylog_stats(
         "total_sessions": total_sessions,
         "total_duration_seconds": total_duration,
         "total_keystrokes": total_keystrokes,
-        "top_apps": [{"name": k, "count": v} for k, v in top_apps]
+        "top_apps": [{"name": k, "count": v} for k, v in top_apps],
+        "key_counts": aggregated_key_counts,
     }
 
 @app.post("/logs", response_model=schemas.Log)
@@ -1015,7 +1025,7 @@ async def chat_with_ollama(request: schemas.ChatRequest, _: models.User = Depend
     """
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             # Check if Ollama is up
             try:
                 response = await client.post(OLLAMA_URL, json={
@@ -1114,7 +1124,7 @@ async def analyze_security_logs(db: Session = Depends(get_db), _: models.User = 
             }}
             """
             
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False) as client:
                 response = await client.post(OLLAMA_URL, json={
                     "model": MODEL,
                     "prompt": prompt,

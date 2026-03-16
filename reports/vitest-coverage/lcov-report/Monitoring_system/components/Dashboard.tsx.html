@@ -412,7 +412,8 @@
 <a name='L347'></a><a href='#L347'>347</a>
 <a name='L348'></a><a href='#L348'>348</a>
 <a name='L349'></a><a href='#L349'>349</a>
-<a name='L350'></a><a href='#L350'>350</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -426,6 +427,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -767,17 +769,18 @@
     BarChart, Bar, Cell, Legend
 } from 'recharts';
 <span class="cstat-no" title="statement not covered" >import { ShieldAlert, Globe, Users, BrainCircuit, Sparkles, PieChart } from 'lucide-react';</span>
-<span class="cstat-no" title="statement not covered" >import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult } from '../types';</span>
+<span class="cstat-no" title="statement not covered" >import { LogEntry, RiskLevel, NetworkTraffic, PredictionResult, UserProfile } from '../types';</span>
 <span class="cstat-no" title="statement not covered" >import { getNetworkTraffic } from '../services/api';</span>
 <span class="cstat-no" title="statement not covered" >import NetworkAnalysis from './NetworkAnalysis';</span>
 <span class="cstat-no" title="statement not covered" >import NetworkGraph from './NetworkGraph';</span>
-<span class="cstat-no" title="statement not covered" >import TrafficSimulator from './TrafficSimulator';</span>
+<span class="cstat-no" title="statement not covered" >import TrafficInterceptor from './TrafficSimulator';</span>
 <span class="cstat-no" title="statement not covered" >import SystemMetrics from './SystemMetrics';</span>
 <span class="cstat-no" title="statement not covered" >import KeymapHeatmap from './KeymapHeatmap';</span>
 <span class="cstat-no" title="statement not covered" >import { io } from 'socket.io-client';</span>
 &nbsp;
 interface DashboardProps {
     logs: LogEntry[];
+    users: UserProfile[];
 }
 &nbsp;
 // Custom Tooltip Component for Cyber Look
@@ -799,7 +802,7 @@ interface DashboardProps {
 <span class="cstat-no" title="statement not covered" >    return null;</span>
 <span class="cstat-no" title="statement not covered" >};</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >const Dashboard: React.FC&lt;DashboardProps&gt; = ({ logs }) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >const Dashboard: React.FC&lt;DashboardProps&gt; = ({ logs, users }) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    const [chartData, setChartData] = useState&lt;any[]&gt;([]);</span>
 <span class="cstat-no" title="statement not covered" >    const [trafficLogs, setTrafficLogs] = useState&lt;NetworkTraffic[]&gt;([]);</span>
 <span class="cstat-no" title="statement not covered" >    const [prediction, setPrediction] = useState&lt;PredictionResult | null&gt;(null);</span>
@@ -879,7 +882,7 @@ interface DashboardProps {
 &nbsp;
     // Dynamic Calculations
 <span class="cstat-no" title="statement not covered" >    const threatsBlocked = logs.filter(l =&gt; l.riskLevel === RiskLevel.HIGH || l.riskLevel === RiskLevel.CRITICAL).length;</span>
-<span class="cstat-no" title="statement not covered" >    const activeUsers = new Set(logs.map(l =&gt; l.user)).size;</span>
+<span class="cstat-no" title="statement not covered" >    const activeUsers = users.filter(user =&gt; user.status === 'ACTIVE').length;</span>
 <span class="cstat-no" title="statement not covered" >    const aiAnomalies = logs.filter(l =&gt; l.description.includes("[ML_DETECTED]")).length;</span>
     
     // Risk Counts for Breakdown Card
@@ -1102,7 +1105,7 @@ interface DashboardProps {
 &nbsp;
             {/* Network Analysis Module */}
 <span class="cstat-no" title="statement not covered" >            &lt;NetworkGraph logs={logs} /&gt;</span>
-<span class="cstat-no" title="statement not covered" >            &lt;TrafficSimulator /&gt;</span>
+<span class="cstat-no" title="statement not covered" >            &lt;TrafficInterceptor /&gt;</span>
 <span class="cstat-no" title="statement not covered" >            &lt;NetworkAnalysis /&gt;</span>
 <span class="cstat-no" title="statement not covered" >            &lt;KeymapHeatmap /&gt;</span>
 <span class="cstat-no" title="statement not covered" >        &lt;/div&gt;</span>
@@ -1117,7 +1120,7 @@ interface DashboardProps {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-01-20T10:02:14.492Z
+                at 2026-03-16T13:37:21.046Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

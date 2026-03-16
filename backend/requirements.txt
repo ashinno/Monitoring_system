@@ -5,12 +5,14 @@ python-socketio
 python-multipart
 python-jose
 passlib[bcrypt]
-bcrypt==4.0.1
+bcrypt==3.2.0
 pandas
 numpy
 scikit-learn
 joblib
 shap
+matplotlib
+seaborn
 psutil
 requests
 fpdf
